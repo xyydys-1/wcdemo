@@ -319,7 +319,7 @@ struct ChatDetailView: View {
                     if store.wallpaperChats.contains(chatID) { store.wallpaperChats.remove(chatID) }
                     else { store.wallpaperChats.insert(chatID) }
                 }
-                .foregroundStyle(.wxGreen)
+                .foregroundStyle(Color.wxGreen)
             }
 
             Section {

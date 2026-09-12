@@ -43,7 +43,7 @@ struct WeChatDemoRoot: View {
         .searchable(text: $searchText, prompt: "搜索")
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tint(.wxGreen)
+        .tint(Color.wxGreen)
         .environmentObject(store)
     }
 }

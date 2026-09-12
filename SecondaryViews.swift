@@ -87,10 +87,10 @@ struct ContactDetailView: View {
                     ChatView(chatID: store.chats.contains(where: { $0.id == contactID }) ? contactID : "xixi")
                 } label: {
                     Label("发消息", systemImage: "message.fill")
-                        .foregroundStyle(.wxGreen)
+                        .foregroundStyle(Color.wxGreen)
                 }
                 Label("音视频通话", systemImage: "video.fill")
-                    .foregroundStyle(.wxGreen)
+                    .foregroundStyle(Color.wxGreen)
             }
 
             Section {
