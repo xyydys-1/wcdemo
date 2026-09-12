@@ -1,0 +1,5 @@
+.theos/
+packages/
+ipa_out/
+*.ipa
+.DS_Store

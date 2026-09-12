@@ -1,0 +1,8 @@
+Package: com.xyy.wechat26demo
+Name: WeChat26Demo
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: iOS 26 SwiftUI Liquid Glass WeChat-style offline demonstration app.
+Maintainer: xyy
+Author: xyy
+Section: Applications

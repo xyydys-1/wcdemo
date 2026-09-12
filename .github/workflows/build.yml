@@ -1,0 +1,81 @@
+name: Build WeChat26Demo iOS 26
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.6
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.6.app"
+          if [[ ! -d "$XCODE_APP" ]]; then
+            echo "Xcode 26.6 not found; available versions:"
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK: $SDK_VERSION"
+          [[ "$SDK_VERSION" == 26.* ]]
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ldid dpkg
+
+      - name: Install Theos
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --recursive https://github.com/theos/theos.git "$GITHUB_WORKSPACE/.theos"
+
+      - name: Build unsigned IPA
+        shell: bash
+        env:
+          THEOS: ${{ github.workspace }}/.theos
+          IPA_BUILD: "1"
+        run: |
+          set -euo pipefail
+          make clean
+          make stage -j1 IPA_BUILD=1
+
+          APP_PATH="$(find .theos -type d -name 'WeChat26Demo.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+
+          rm -rf ipa_out WeChat26Demo-iOS26-unsigned.ipa
+          mkdir -p ipa_out/Payload
+          ditto "$APP_PATH" ipa_out/Payload/WeChat26Demo.app
+          rm -rf ipa_out/Payload/WeChat26Demo.app/_CodeSignature
+          rm -f ipa_out/Payload/WeChat26Demo.app/embedded.mobileprovision
+
+          (
+            cd ipa_out
+            /usr/bin/zip -qry ../WeChat26Demo-iOS26-unsigned.ipa Payload
+          )
+          /usr/bin/unzip -t WeChat26Demo-iOS26-unsigned.ipa
+          test -s WeChat26Demo-iOS26-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeChat26Demo-iOS26-unsigned-ipa
+          path: WeChat26Demo-iOS26-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
