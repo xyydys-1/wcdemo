@@ -33,6 +33,13 @@ jobs:
           echo "iPhoneOS SDK: $SDK_VERSION"
           [[ "$SDK_VERSION" == 26.* ]]
 
+      - name: Verify persistent local records
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun swiftc -swift-version 5 -parse-as-library LocalData.swift DemoSeed.swift Tests/LocalDataTests.swift -o "$RUNNER_TEMP/wechat-local-data-tests"
+          "$RUNNER_TEMP/wechat-local-data-tests"
+
       - name: Install build dependencies
         shell: bash
         run: |

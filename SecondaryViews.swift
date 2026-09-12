@@ -9,7 +9,13 @@ struct ContactsView: View {
             List {
                 Section {
                     Label("新的朋友", systemImage: "person.badge.plus")
-                    Label("群聊", systemImage: "person.3.fill")
+                    NavigationLink {
+                        List(store.chats.filter(\.isGroup)) { chat in
+                            NavigationLink { ChatView(chatID: chat.id) } label: {
+                                HStack(spacing: 12) { ProfileAvatar(id: chat.id, size: 42); Text(chat.title) }
+                            }
+                        }.navigationTitle("群聊").toolbar(.hidden, for: .tabBar)
+                    } label: { Label("群聊", systemImage: "person.3.fill") }
                     Label("标签", systemImage: "tag.fill")
                     Label("服务号", systemImage: "bag.fill")
                 }
@@ -19,21 +25,17 @@ struct ContactsView: View {
                     Label("莫塔里", systemImage: "seal.fill")
                 }
 
-                Section("A") {
-                    ForEach(store.contacts.prefix(2)) { contact in contactLink(contact) }
-                }
-                Section("Q") {
-                    ForEach(store.contacts.dropFirst(2).prefix(2)) { contact in contactLink(contact) }
-                }
-                Section("S") {
-                    ForEach(store.contacts.dropFirst(4)) { contact in contactLink(contact) }
+                Section("联系人") {
+                    ForEach(store.contacts.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { contact in
+                        contactLink(contact)
+                    }
                 }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("通讯录")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { } label: { Image(systemName: "person.badge.plus") }
+                    NavigationLink { AddFriendView() } label: { Image(systemName: "person.badge.plus") }
                 }
             }
         }
@@ -44,7 +46,7 @@ struct ContactsView: View {
             ContactDetailView(contactID: contact.id)
         } label: {
             HStack(spacing: 12) {
-                DemoAvatar(symbol: contact.symbol, color: contact.color, size: 42)
+                ProfileAvatar(id: contact.id, size: 42)
                 Text(contact.name)
             }
         }
@@ -57,6 +59,7 @@ struct ContactDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let contactID: String
     @State private var showDelete = false
+    @State private var showProfile = false
 
     private var contact: DemoContact {
         store.contact(contactID) ?? DemoContact(id: contactID, name: "联系人", symbol: "person.fill", color: .gray)
@@ -66,7 +69,7 @@ struct ContactDetailView: View {
         Form {
             Section {
                 HStack(spacing: 16) {
-                    DemoAvatar(symbol: contact.symbol, color: contact.color, size: 68)
+                    Button { showProfile = true } label: { ProfileAvatar(id: contact.id, size: 68) }.buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(contact.name).font(.title3.bold())
                         Text("微信号：demo_\(contact.id)")
@@ -78,13 +81,13 @@ struct ContactDetailView: View {
             }
 
             Section {
-                NavigationLink("设置备注和标签") { Text("演示页") }
+                Button("修改头像和昵称 / 备注") { showProfile = true }
                 HStack { Text("朋友权限"); Spacer(); Text("聊天、朋友圈").foregroundStyle(.secondary) }
             }
 
             Section {
                 NavigationLink {
-                    ChatView(chatID: store.chats.contains(where: { $0.id == contactID }) ? contactID : "xixi")
+                    ChatView(chatID: contactID)
                 } label: {
                     Label("发消息", systemImage: "message.fill")
                         .foregroundStyle(Color.wxGreen)
@@ -100,6 +103,7 @@ struct ContactDetailView: View {
         .navigationTitle("详细资料")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .sheet(isPresented: $showProfile) { NavigationStack { ProfileEditor(profileID: contactID) } }
         .alert("删除联系人？", isPresented: $showDelete) {
             Button("删除", role: .destructive) {
                 store.deleteContact(contactID)
@@ -107,7 +111,7 @@ struct ContactDetailView: View {
             }
             Button("取消", role: .cancel) { }
         } message: {
-            Text("这是离线 Demo，只影响当前运行。")
+            Text("将从本机通讯录中移除这个联系人。已有的聊天笔记仍会保留。")
         }
     }
 }
@@ -162,20 +166,24 @@ private struct DiscoverRow: View {
 
 @available(iOS 26.0, *)
 struct MeView: View {
+    @EnvironmentObject private var store: DemoStore
+    @State private var showProfile = false
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    Button { showProfile = true } label: {
                     HStack(spacing: 16) {
-                        DemoAvatar(symbol: "person.crop.circle.fill", color: .blue, size: 72)
+                        ProfileAvatar(id: "me", size: 72)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("漂泊者").font(.title3.bold())
+                            Text(store.state.me.name).font(.title3.bold()).foregroundStyle(.primary)
                             Text("微信号：Rover26").font(.subheadline).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "qrcode").foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 10)
+                    }.buttonStyle(.plain)
                 }
 
                 Section {
@@ -193,6 +201,7 @@ struct MeView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("我")
+            .sheet(isPresented: $showProfile) { NavigationStack { ProfileEditor(profileID: "me") } }
         }
     }
 }
@@ -269,13 +278,13 @@ struct CreateGroupView: View {
 
     var body: some View {
         List {
-            ForEach(store.contacts) { contact in
+            ForEach(store.contacts.filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }) { contact in
                 Button {
                     if selected.contains(contact.id) { selected.remove(contact.id) }
                     else { selected.insert(contact.id) }
                 } label: {
                     HStack(spacing: 12) {
-                        DemoAvatar(symbol: contact.symbol, color: contact.color, size: 42)
+                        ProfileAvatar(id: contact.id, size: 42)
                         Text(contact.name).foregroundStyle(.primary)
                         Spacer()
                         Image(systemName: selected.contains(contact.id) ? "checkmark.circle.fill" : "circle")
@@ -290,64 +299,9 @@ struct CreateGroupView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("完成") {
-                    _ = store.createGroup(memberIDs: Array(selected))
-                    dismiss()
+                    if store.createGroup(memberIDs: Array(selected)) != nil { dismiss() }
                 }
                 .disabled(selected.isEmpty)
-            }
-        }
-    }
-}
-
-@available(iOS 26.0, *)
-struct FakePhotoPicker: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var selected: Set<String> = []
-    let onDone: ([String]) -> Void
-
-    private let photos = (1...15).map { "photo_\($0)" }
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 2) {
-                    ForEach(photos, id: \.self) { name in
-                        ZStack(alignment: .bottomTrailing) {
-                            Image(name)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 138)
-                                .clipped()
-                            Image(systemName: selected.contains(name) ? "checkmark.circle.fill" : "circle")
-                                .font(.title3)
-                                .foregroundStyle(selected.contains(name) ? Color.wxGreen : Color.white)
-                                .shadow(radius: 2)
-                                .padding(7)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if selected.contains(name) { selected.remove(name) }
-                            else { selected.insert(name) }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("照片")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onDone(Array(selected).sorted())
-                    } label: {
-                        Image(systemName: "checkmark")
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(selected.isEmpty)
-                }
             }
         }
     }

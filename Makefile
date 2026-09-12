@@ -11,12 +11,16 @@ WeChat26Demo_FILES := \
 	main.m \
 	AppDelegate.m \
 	SceneDelegate.m \
+	LocalData.swift \
+	DemoSeed.swift \
 	Models.swift \
+	MediaViews.swift \
+	ProfileViews.swift \
 	RootViews.swift \
 	ChatViews.swift \
 	SecondaryViews.swift
 
-WeChat26Demo_FRAMEWORKS := UIKit PhotosUI
+WeChat26Demo_FRAMEWORKS := UIKit SwiftUI PhotosUI ImageIO QuickLook
 WeChat26Demo_CFLAGS := -fobjc-arc
 WeChat26Demo_SWIFTFLAGS := -parse-as-library
 

@@ -1,62 +1,45 @@
-# WeChat26Demo 0.2.0
+# WeChat26Demo 0.3.0 — 本地聊天笔记
 
-A standalone iOS 26 SwiftUI offline demo reconstructed from the supplied 4:01 reference video.
-It is intentionally a fake-running showcase: no server, no account system, no network protocol,
-no persistence, and no private WeChat API.
+基于本次上传的 `WeChat26Demo_v0.2.0_UIPhotoStack` 修改。最低 iOS 26.0，arm64，Bundle ID 保持 `com.xyy.wechat26demo`，构建号 5。
 
-## Current demo scope
+## 本次修改
 
-- Native iOS 26 SwiftUI `TabView` with four main tabs plus the system search-role tab.
-- `tabBarMinimizeBehavior(.onScrollDown)` for the system iOS 26 compact tab transition.
-- System Liquid Glass button styles and `GlassEffectContainer` in chat controls.
-- Chats list with unread badges, pin/delete swipe actions, plus-menu and navigation.
-- Chat screen with iOS 26 Liquid Glass text bubbles, image messages, swipe/tap photo-stack animation and a three-piece glass composer.
-- Fake photo picker for demo message sending, plus the real system `PhotosPicker` for per-chat wallpapers.
-- Chat detail/group-detail style controls, pin/mute toggles and photo-library wallpaper selection.
-- Contacts, contact detail/delete confirmation, Discover, Me, Add Friend, Payment and Create Group.
-- Semantic system colors for adaptive toolbar icons and automatic iOS light/dark appearance.
-- Runtime state is memory-only and resets when the app is killed.
+- 右上角：会话列表显示一个加号；进入聊天显示搜索和详情两个独立的系统玻璃按钮；返回由导航路径恢复列表按钮。为工具栏项目分配独立身份，用 iOS 26 ToolbarSpacer 分隔背景。
+- 附件：保留原有 50pt 麦克风、输入胶囊、加号三段式输入栏。附件以独立大圆角玻璃面板浮在输入栏上方，4 列 × 2 行，统一图标中心。开合从加号附近缩放、渐清晰并弹性收展；轻点外部关闭；支持“减弱动态效果”。
+- 照片：用系统图库选择，最多 30 张，按选择顺序保存。照片先复制到应用目录，再保存消息；不引用图库的临时地址。
+- 多图：保留本机照片的实际比例，叠牌、横滑翻牌、轻点展开全部照片，展开后轻点某张收成新的封面。长按“查看大图”进入原生 Quick Look，可翻页、缩放和分享。单张照片轻点即可查看大图。
+- 资料：自己、每位联系人和群聊均可自定义图库头像与昵称/备注/群名。联系人资料会同步到通讯录、会话列表、消息头像和群成员；未自定义群头像时显示成员拼图。
+- 本地记录：文字、图片、资料、群成员、背景、草稿、置顶、免打扰、提醒开关和隐藏会话状态都会保存。发送成功后才清空输入；新消息自动滚动到可见位置。
+- 修正联系人“发消息”误跳汐汐、示例列表有摘要却无消息、创建多个群聊共用同一个 ID、清空后又被草稿/示例覆盖的问题。
 
-## Build target
+## 入口
 
-- Minimum iOS: 26.0
-- Architecture: arm64
-- GitHub Actions runner: macOS 26
-- Xcode: 26.6
-- Output: unsigned IPA (sign with your own certificate/profile before normal installation)
+- 自己：`我 → 顶部个人资料`，或轻点自己消息旁的头像。
+- 联系人：`通讯录 → 联系人 → 修改头像和昵称 / 备注`；也可轻点消息头像或打开聊天详情。
+- 群聊：`聊天右上角详情 → 顶部群资料`；下方群成员头像可分别修改。
+- 图库发送：`聊天加号 → 照片`。选好后按系统选择器的完成按钮，等待导入提示结束。
+- 清空：`聊天详情 → 清空聊天记录`，需要确认。
 
-## GitHub Actions
+## 保存规则
 
-1. Create a new GitHub repository.
-2. Upload the *contents* of this folder to the repository root.
-3. Commit/push to `main`.
-4. Open **Actions -> Build WeChat26Demo iOS 26**.
-5. Wait for the green run.
-6. Download artifact **WeChat26Demo-iOS26-unsigned-ipa**.
-7. Sign the IPA using your own signing workflow, then install it.
+首次运行且本地没有存档时才载入示例数据。以后读取存档，包括用户主动清空的状态，不用示例覆盖。消息与图片保存到应用的 Application Support 目录；图片使用独立文件，元数据使用原子替换并保留上一份完整备份。读取失败时保留原文件并提示，不自动重新初始化。未发送草稿在停顿 0.3 秒、离开页面或应用失去前台时写回。
 
-You can also press **Run workflow** manually because `workflow_dispatch` is enabled.
+0.2.0 没有持久化，已经随进程结束丢失的数据无法从该工程包追回。0.3.0 开始保存的新内容可在正常退出和重启后恢复。升级时保持相同 Bundle ID 并覆盖安装；卸载应用会删除它的本地数据。
 
-## 0.2.0 pass
+照片副本最长边 2048 像素，头像最长边 512 像素。导入时校正方向，透明图片保留 PNG，其他图片保存为 JPEG。原工程内置图片只有 139×139 的方形缩略图，本版用比例提示适配叠牌；本机导入照片使用真实宽高比。
 
-- Hides the root tab bar on chat/detail flows.
-- Splits the chat search/menu toolbar controls into independent glass groups.
-- Makes toolbar icons semantic black/white instead of inheriting the green tab tint.
-- Rebuilds the composer as equal-height circle + capsule + circle glass controls.
-- Adds colored action icons with primary text in the composer panel.
-- Replaces the built-in wallpaper toggle with the system photo library picker.
-- Pins selected wallpapers to the chat background coordinate space so keyboard changes do not move them.
-- Converts text bubbles to tinted iOS 26 Liquid Glass.
-- Reworks stacked photo messages with fan expansion and swipe-to-cycle top-card behavior.
-- Seeds the family group so it never opens as an empty chat.
+附件的照片和拍摄可用；语音输入引导使用系统键盘听写。通话、位置、红包、转账和礼物目前仅有演示入口，不会执行真实通话或支付。
 
-## Notes for the next optimization pass
+## 编译
 
-The code is deliberately componentized rather than pixel-hardcoded. For a 90%+ visual pass, focus on:
-1. exact list row heights and typography;
-2. exact toolbar spacing from the reference video;
-3. fine tuning photo-stack spring/rotation curves on device;
-4. more accurate avatar/background assets;
-5. matching remaining secondary pages.
+ZIP 内是工程根目录的文件。将内容覆盖到原 GitHub 仓库根目录，保留 `.github` 文件夹，按原有 Actions 流程构建和签名。详见 `GITHUB_BUILD_CN.md`。
 
-Do not replace the system iOS 26 tab bar with a custom drawn bar unless a device test proves a real mismatch.
+构建流水线会先运行 `Tests/LocalDataTests.swift` 的保存回读测试，再构建 iOS 应用。没有新增第三方包依赖。
+
+## 本次验证状态
+
+- 已检查所有 Swift 源文件的语法树、资源引用、版本信息、Makefile 源文件清单、构建脚本与 ZIP 完整性。
+- 已比对原输入胶囊源码：尺寸、间距、字体和玻璃样式保持一致，只增加键盘焦点绑定及草稿保存逻辑。
+- 当前执行环境没有 Xcode / iOS SDK，尚未执行 iOS 编译、Foundation 测试二进制或真机动画检查。附带测试由 GitHub 构建时运行。
+
+建议安装后依次检查：列表进入/返回聊天（含侧滑取消）；附件开合与键盘切换；发送横竖混合的 1、3、6 张照片；修改自己/联系人/群头像和名字；发送笔记后结束进程重开；清空一个会话再重开。

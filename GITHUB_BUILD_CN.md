@@ -20,3 +20,9 @@
 
 Swift 语言本身能在 Windows/Linux 使用，但 iOS App 依赖 Apple 的 UIKit、SwiftUI 和 iPhoneOS SDK，
 正式构建仍需要 macOS/Xcode 工具链。GitHub 的 macOS runner 正好解决这一点。
+
+## 0.3.0 更新方式
+
+本次压缩包为平铺工程，直接覆盖原仓库的工程文件。新增 `LocalData.swift`、`DemoSeed.swift`、`MediaViews.swift`、`ProfileViews.swift`、`Tests/LocalDataTests.swift`，必须一并上传；Makefile 已包含所有应用源文件。工作流新增本地数据回读测试，会在打包前执行。
+
+应用版本为 0.3.0 / 构建号 5，Bundle ID 与旧版一致。无需更改原签名方式。
