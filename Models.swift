@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UIKit
 
 struct DemoContact: Identifiable {
     let id: String
@@ -40,7 +41,7 @@ final class DemoStore: ObservableObject {
     @Published var messages: [String: [DemoMessage]] = [:]
     @Published var pinned: Set<String> = []
     @Published var muted: Set<String> = []
-    @Published var wallpaperChats: Set<String> = []
+    @Published var chatWallpapers: [String: UIImage] = [:]
 
     init() {
         contacts = [
@@ -87,6 +88,13 @@ final class DemoStore: ObservableObject {
             DemoMessage(senderID: "xixi", incoming: true, kind: .text("今晚继续行动吗？")),
             DemoMessage(senderID: "me", incoming: false, kind: .text("可以")),
             DemoMessage(senderID: "shore", incoming: true, kind: .photo("photo_12"))
+        ]
+
+        messages["family"] = [
+            DemoMessage(senderID: nil, incoming: false, kind: .time("21:48")),
+            DemoMessage(senderID: "xixi", incoming: true, kind: .text("今晚一起吃饭吗？")),
+            DemoMessage(senderID: "shore", incoming: true, kind: .text("记得早点休息～")),
+            DemoMessage(senderID: "me", incoming: false, kind: .text("好，晚点见"))
         ]
     }
 

@@ -16,7 +16,7 @@ WeChat26Demo_FILES := \
 	ChatViews.swift \
 	SecondaryViews.swift
 
-WeChat26Demo_FRAMEWORKS := UIKit
+WeChat26Demo_FRAMEWORKS := UIKit PhotosUI
 WeChat26Demo_CFLAGS := -fobjc-arc
 WeChat26Demo_SWIFTFLAGS := -parse-as-library
 

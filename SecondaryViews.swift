@@ -99,6 +99,7 @@ struct ContactDetailView: View {
         }
         .navigationTitle("详细资料")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .alert("删除联系人？", isPresented: $showDelete) {
             Button("删除", role: .destructive) {
                 store.deleteContact(contactID)
@@ -217,6 +218,7 @@ struct AddFriendView: View {
             }
         }
         .navigationTitle("添加朋友")
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -254,6 +256,7 @@ struct PaymentView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -282,6 +285,7 @@ struct CreateGroupView: View {
             }
         }
         .navigationTitle("发起群聊")
+        .toolbar(.hidden, for: .tabBar)
         .searchable(text: $searchText, prompt: "搜索")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

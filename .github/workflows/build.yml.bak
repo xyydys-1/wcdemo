@@ -62,18 +62,6 @@ jobs:
           rm -rf ipa_out WeChat26Demo-iOS26-unsigned.ipa
           mkdir -p ipa_out/Payload
           ditto "$APP_PATH" ipa_out/Payload/WeChat26Demo.app
-
-          # Theos resource staging can leave the app metadata outside the bundle root.
-          # Force the canonical Info.plist into Payload/<App>.app so third-party signers
-          # can read CFBundleIdentifier / CFBundleVersion / CFBundleExecutable.
-          cp -f Resources/Info.plist ipa_out/Payload/WeChat26Demo.app/Info.plist
-          /usr/bin/plutil -lint ipa_out/Payload/WeChat26Demo.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" ipa_out/Payload/WeChat26Demo.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" ipa_out/Payload/WeChat26Demo.app/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" ipa_out/Payload/WeChat26Demo.app/Info.plist
-          test -f ipa_out/Payload/WeChat26Demo.app/WeChat26Demo
-          chmod 755 ipa_out/Payload/WeChat26Demo.app/WeChat26Demo
-
           rm -rf ipa_out/Payload/WeChat26Demo.app/_CodeSignature
           rm -f ipa_out/Payload/WeChat26Demo.app/embedded.mobileprovision
 

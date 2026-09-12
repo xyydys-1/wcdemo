@@ -88,7 +88,9 @@ struct ChatsView: View {
                         Button("收付款", systemImage: "qrcode") { quickRoute = .payment }
                     } label: {
                         Image(systemName: "plus")
+                            .foregroundStyle(.primary)
                     }
+                    .tint(Color.primary)
                 }
             }
             .navigationDestination(item: $quickRoute) { route in

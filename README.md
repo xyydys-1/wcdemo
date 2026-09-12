@@ -1,4 +1,4 @@
-# WeChat26Demo 0.1.0
+# WeChat26Demo 0.2.0
 
 A standalone iOS 26 SwiftUI offline demo reconstructed from the supplied 4:01 reference video.
 It is intentionally a fake-running showcase: no server, no account system, no network protocol,
@@ -10,11 +10,11 @@ no persistence, and no private WeChat API.
 - `tabBarMinimizeBehavior(.onScrollDown)` for the system iOS 26 compact tab transition.
 - System Liquid Glass button styles and `GlassEffectContainer` in chat controls.
 - Chats list with unread badges, pin/delete swipe actions, plus-menu and navigation.
-- Chat screen with text bubbles, image messages, tappable stacked-photo animation and composer.
-- Fake photo picker using image material sampled from the supplied video.
-- Chat detail/group-detail style controls, pin/mute toggles and wallpaper switching.
+- Chat screen with iOS 26 Liquid Glass text bubbles, image messages, swipe/tap photo-stack animation and a three-piece glass composer.
+- Fake photo picker for demo message sending, plus the real system `PhotosPicker` for per-chat wallpapers.
+- Chat detail/group-detail style controls, pin/mute toggles and photo-library wallpaper selection.
 - Contacts, contact detail/delete confirmation, Discover, Me, Add Friend, Payment and Create Group.
-- Semantic system colors, so the UI follows iOS light/dark mode automatically.
+- Semantic system colors for adaptive toolbar icons and automatic iOS light/dark appearance.
 - Runtime state is memory-only and resets when the app is killed.
 
 ## Build target
@@ -37,14 +37,26 @@ no persistence, and no private WeChat API.
 
 You can also press **Run workflow** manually because `workflow_dispatch` is enabled.
 
+## 0.2.0 pass
+
+- Hides the root tab bar on chat/detail flows.
+- Splits the chat search/menu toolbar controls into independent glass groups.
+- Makes toolbar icons semantic black/white instead of inheriting the green tab tint.
+- Rebuilds the composer as equal-height circle + capsule + circle glass controls.
+- Adds colored action icons with primary text in the composer panel.
+- Replaces the built-in wallpaper toggle with the system photo library picker.
+- Pins selected wallpapers to the chat background coordinate space so keyboard changes do not move them.
+- Converts text bubbles to tinted iOS 26 Liquid Glass.
+- Reworks stacked photo messages with fan expansion and swipe-to-cycle top-card behavior.
+- Seeds the family group so it never opens as an empty chat.
+
 ## Notes for the next optimization pass
 
 The code is deliberately componentized rather than pixel-hardcoded. For a 90%+ visual pass, focus on:
 1. exact list row heights and typography;
-2. exact chat bubble/image geometry;
-3. photo-stack spring/rotation curves;
-4. toolbar icon spacing and glass grouping;
-5. more accurate avatar/background assets;
-6. matching the video's fake photo picker and group-detail pages.
+2. exact toolbar spacing from the reference video;
+3. fine tuning photo-stack spring/rotation curves on device;
+4. more accurate avatar/background assets;
+5. matching remaining secondary pages.
 
 Do not replace the system iOS 26 tab bar with a custom drawn bar unless a device test proves a real mismatch.

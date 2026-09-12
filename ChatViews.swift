@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 @available(iOS 26.0, *)
 struct ChatView: View {
@@ -6,36 +8,48 @@ struct ChatView: View {
     let chatID: String
 
     private var chat: DemoChat { store.chat(chatID) }
-    private var usesWallpaper: Bool { store.wallpaperChats.contains(chatID) }
 
     var body: some View {
         ZStack {
             chatBackground
 
-            ScrollView {
+            ScrollView(.vertical) {
                 LazyVStack(spacing: 10) {
                     ForEach(store.messages[chatID] ?? []) { message in
                         MessageRow(message: message)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
-                .padding(.bottom, 8)
+                .padding(.bottom, 10)
             }
             .scrollDismissesKeyboard(.interactively)
         }
         .navigationTitle(chat.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { } label: { Image(systemName: "magnifyingglass") }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { } label: {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.primary)
+                }
+                .tint(Color.primary)
+            }
+            .sharedBackgroundVisibility(.hidden)
+
+            ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     ChatDetailView(chatID: chatID)
                 } label: {
                     Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(.primary)
                 }
+                .tint(Color.primary)
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ChatComposer(chatID: chatID)
@@ -46,16 +60,20 @@ struct ChatView: View {
 
     @ViewBuilder
     private var chatBackground: some View {
-        if usesWallpaper {
-            Image("wallpaper")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-                .overlay(Color.black.opacity(0.04))
-        } else {
-            Color(uiColor: .systemGroupedBackground)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            if let image = store.chatWallpapers[chatID] {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .overlay(Color.black.opacity(0.035))
+            } else {
+                Color(uiColor: .systemGroupedBackground)
+            }
         }
+        .ignoresSafeArea()
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 
@@ -74,7 +92,7 @@ private struct MessageRow: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
-                    .background(.thinMaterial, in: Capsule())
+                    .glassEffect(.regular, in: Capsule())
                 Spacer()
             }
             .padding(.vertical, 4)
@@ -83,12 +101,16 @@ private struct MessageRow: View {
             bubbleRow {
                 Text(text)
                     .font(.system(size: 17))
-                    .foregroundStyle(message.incoming ? Color.primary : Color.black)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 10)
-                    .background(
-                        message.incoming ? Color(uiColor: .secondarySystemBackground) : Color.wxBubbleGreen,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .glassEffect(
+                        .regular.tint(
+                            message.incoming
+                                ? Color(uiColor: .secondarySystemBackground).opacity(0.72)
+                                : Color.wxBubbleGreen.opacity(0.72)
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
             }
 
@@ -114,14 +136,14 @@ private struct MessageRow: View {
             if message.incoming {
                 senderAvatar
                 content()
-                Spacer(minLength: 58)
+                Spacer(minLength: 48)
             } else {
-                Spacer(minLength: 58)
+                Spacer(minLength: 48)
                 content()
                 DemoAvatar(symbol: "person.fill", color: .gray, size: 38)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: message.incoming ? .leading : .trailing)
     }
 
     @ViewBuilder
@@ -138,48 +160,128 @@ private struct MessageRow: View {
 private struct PhotoStackMessage: View {
     let names: [String]
     @State private var expanded = false
+    @State private var frontIndex = 0
+    @GestureState private var dragX: CGFloat = 0
+
+    private var cards: [String] { Array(names.prefix(4)) }
 
     var body: some View {
-        Group {
-            if expanded {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
-                    ForEach(Array(names.prefix(4).enumerated()), id: \.offset) { _, name in
-                        Image(name)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 88, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    }
-                }
-                .frame(width: 180)
-            } else {
-                ZStack {
-                    ForEach(Array(names.prefix(4).enumerated()), id: \.offset) { index, name in
-                        Image(name)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 184, height: 118)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .rotationEffect(.degrees(rotation(for: index)))
-                            .offset(x: CGFloat(index) * 2.5, y: CGFloat(index) * -4.0)
-                            .shadow(color: .black.opacity(0.16), radius: 3, y: 2)
-                            .zIndex(Double(names.count - index))
-                    }
-                }
-                .frame(width: 196, height: 142)
+        ZStack {
+            ForEach(cards.indices, id: \.self) { index in
+                card(index)
             }
         }
+        .frame(width: 206, height: 166)
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(duration: 0.45, bounce: 0.18)) {
-                expanded.toggle()
+            guard !expanded else { return }
+            withAnimation(.spring(duration: 0.44, bounce: 0.18)) {
+                expanded = true
             }
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
+                .updating($dragX) { value, state, _ in
+                    if !expanded { state = value.translation.width }
+                }
+                .onEnded { value in
+                    guard !expanded, cards.count > 1 else { return }
+                    let projected = value.predictedEndTranslation.width
+                    guard abs(projected) > 38 else { return }
+                    let delta = projected < 0 ? 1 : -1
+                    withAnimation(.spring(duration: 0.42, bounce: 0.22)) {
+                        frontIndex = normalized(frontIndex + delta)
+                    }
+                }
+        )
+        .accessibilityLabel("图片组，轻点展开，左右滑动切换")
     }
 
-    private func rotation(for index: Int) -> Double {
-        let values = [-5.5, 4.0, -2.0, 1.5]
-        return values[index % values.count]
+    @ViewBuilder
+    private func card(_ index: Int) -> some View {
+        let relative = relativeIndex(for: index)
+
+        Image(cards[index])
+            .resizable()
+            .scaledToFill()
+            .frame(width: 184, height: 118)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
+            }
+            .shadow(color: .black.opacity(expanded ? 0.11 : 0.18), radius: expanded ? 3 : 5, y: 2)
+            .scaleEffect(scale(for: relative))
+            .rotationEffect(.degrees(rotation(for: relative) + dragRotation(for: relative)))
+            .offset(x: xOffset(for: relative) + dragOffset(for: relative), y: yOffset(for: relative))
+            .zIndex(zIndex(for: relative))
+            .onTapGesture {
+                guard expanded else { return }
+                withAnimation(.spring(duration: 0.46, bounce: 0.2)) {
+                    frontIndex = index
+                    expanded = false
+                }
+            }
+            .animation(.spring(duration: 0.46, bounce: 0.18), value: expanded)
+            .animation(.spring(duration: 0.42, bounce: 0.2), value: frontIndex)
+    }
+
+    private func normalized(_ value: Int) -> Int {
+        guard !cards.isEmpty else { return 0 }
+        return (value % cards.count + cards.count) % cards.count
+    }
+
+    private func relativeIndex(for index: Int) -> Int {
+        guard !cards.isEmpty else { return 0 }
+        return normalized(index - frontIndex)
+    }
+
+    private func zIndex(for relative: Int) -> Double {
+        Double(cards.count - relative)
+    }
+
+    private func scale(for relative: Int) -> CGFloat {
+        if expanded { return 0.51 }
+        let scales: [CGFloat] = [1.0, 0.975, 0.95, 0.925]
+        return scales[min(relative, scales.count - 1)]
+    }
+
+    private func rotation(for relative: Int) -> Double {
+        if expanded {
+            let values = [-1.5, 1.2, 1.0, -1.0]
+            return values[min(relative, values.count - 1)]
+        }
+        let values = [-4.5, 3.2, -2.2, 1.5]
+        return values[min(relative, values.count - 1)]
+    }
+
+    private func xOffset(for relative: Int) -> CGFloat {
+        if expanded {
+            let values: [CGFloat] = [-51, 51, -51, 51]
+            return values[min(relative, values.count - 1)]
+        }
+        let values: [CGFloat] = [0, 4, -2, 2]
+        return values[min(relative, values.count - 1)]
+    }
+
+    private func yOffset(for relative: Int) -> CGFloat {
+        if expanded {
+            let values: [CGFloat] = [-34, -34, 36, 36]
+            return values[min(relative, values.count - 1)]
+        }
+        let values: [CGFloat] = [2, -4, -8, -12]
+        return values[min(relative, values.count - 1)]
+    }
+
+    private func dragOffset(for relative: Int) -> CGFloat {
+        guard !expanded else { return 0 }
+        if relative == 0 { return dragX }
+        return dragX * CGFloat(max(0.0, 0.10 - Double(relative) * 0.02))
+    }
+
+    private func dragRotation(for relative: Int) -> Double {
+        guard !expanded, relative == 0 else { return 0 }
+        return Double(dragX / 32)
     }
 }
 
@@ -200,33 +302,46 @@ private struct ChatComposer: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            GlassEffectContainer(spacing: 10) {
-                HStack(spacing: 8) {
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 10) {
                     Button { } label: {
                         Image(systemName: "mic.fill")
-                            .frame(width: 34, height: 34)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 50, height: 50)
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: 9) {
                         TextField("", text: $input)
+                            .foregroundStyle(.primary)
                             .textInputAutocapitalization(.never)
                             .submitLabel(.send)
                             .onSubmit(send)
                         Image(systemName: "face.smiling")
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(.primary)
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: 42)
-                    .glassEffect()
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .glassEffect(.regular.interactive(), in: Capsule())
 
                     Button {
-                        withAnimation(.spring(duration: 0.32, bounce: 0.16)) { showPlus.toggle() }
+                        withAnimation(.spring(duration: 0.32, bounce: 0.16)) {
+                            showPlus.toggle()
+                        }
                     } label: {
                         Image(systemName: showPlus ? "xmark" : "plus")
-                            .frame(width: 34, height: 34)
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 50, height: 50)
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
                 }
             }
         }
@@ -248,27 +363,40 @@ private struct ChatComposer: View {
 @available(iOS 26.0, *)
 private struct PlusPanel: View {
     var onPhotos: () -> Void
-    private let items: [(String, String)] = [
-        ("照片", "photo.on.rectangle"), ("拍摄", "camera.fill"),
-        ("视频通话", "video.fill"), ("位置", "location.fill"),
-        ("红包", "envelope.fill"), ("转账", "arrow.left.arrow.right"),
-        ("礼物", "gift.fill"), ("语音输入", "waveform")
+
+    private struct PlusItem: Identifiable {
+        let id: Int
+        let title: String
+        let symbol: String
+        let color: Color
+    }
+
+    private let items: [PlusItem] = [
+        PlusItem(id: 0, title: "照片", symbol: "photo.on.rectangle", color: .blue),
+        PlusItem(id: 1, title: "拍摄", symbol: "camera.fill", color: .indigo),
+        PlusItem(id: 2, title: "视频通话", symbol: "video.fill", color: .green),
+        PlusItem(id: 3, title: "位置", symbol: "location.fill", color: .green),
+        PlusItem(id: 4, title: "红包", symbol: "envelope.fill", color: .red),
+        PlusItem(id: 5, title: "转账", symbol: "arrow.left.arrow.right", color: .orange),
+        PlusItem(id: 6, title: "礼物", symbol: "gift.fill", color: .pink),
+        PlusItem(id: 7, title: "语音输入", symbol: "waveform", color: .blue)
     ]
 
     var body: some View {
         GlassEffectContainer(spacing: 12) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 14) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                ForEach(items) { item in
                     Button {
-                        if index == 0 { onPhotos() }
+                        if item.id == 0 { onPhotos() }
                     } label: {
                         VStack(spacing: 7) {
-                            Image(systemName: item.1)
+                            Image(systemName: item.symbol)
                                 .font(.system(size: 23, weight: .medium))
+                                .foregroundStyle(item.color)
                                 .frame(width: 54, height: 48)
-                            Text(item.0)
+                            Text(item.title)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
                         }
                     }
                     .buttonStyle(.glass)
@@ -283,8 +411,10 @@ private struct PlusPanel: View {
 struct ChatDetailView: View {
     @EnvironmentObject private var store: DemoStore
     let chatID: String
+    @State private var wallpaperItem: PhotosPickerItem?
 
     private var chat: DemoChat { store.chat(chatID) }
+    private var hasWallpaper: Bool { store.chatWallpapers[chatID] != nil }
 
     var body: some View {
         Form {
@@ -296,16 +426,23 @@ struct ChatDetailView: View {
                     }
                     Button { } label: {
                         Image(systemName: "plus")
-                            .font(.title2)
+                            .font(.system(size: 23, weight: .medium))
+                            .foregroundStyle(.primary)
                             .frame(width: 58, height: 58)
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
                 }
                 .padding(.vertical, 6)
             }
 
             Section {
-                NavigationLink("查找聊天内容") { Text("演示搜索页").navigationTitle("查找聊天内容") }
+                NavigationLink("查找聊天内容") {
+                    Text("演示搜索页")
+                        .navigationTitle("查找聊天内容")
+                        .toolbar(.hidden, for: .tabBar)
+                }
             }
 
             Section {
@@ -315,11 +452,21 @@ struct ChatDetailView: View {
             }
 
             Section {
-                Button(store.wallpaperChats.contains(chatID) ? "恢复默认聊天背景" : "设置当前聊天背景") {
-                    if store.wallpaperChats.contains(chatID) { store.wallpaperChats.remove(chatID) }
-                    else { store.wallpaperChats.insert(chatID) }
+                PhotosPicker(selection: $wallpaperItem, matching: .images) {
+                    HStack {
+                        Text("设置当前聊天背景")
+                            .foregroundStyle(Color.wxGreen)
+                        Spacer()
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .foregroundStyle(Color.wxGreen)
+                if hasWallpaper {
+                    Button("恢复默认聊天背景") {
+                        store.chatWallpapers.removeValue(forKey: chatID)
+                        wallpaperItem = nil
+                    }
+                }
             }
 
             Section {
@@ -330,6 +477,17 @@ struct ChatDetailView: View {
         }
         .navigationTitle(chat.isGroup ? "群聊详情" : "聊天详情")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .onChange(of: wallpaperItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { return }
+                await MainActor.run {
+                    store.chatWallpapers[chatID] = image
+                }
+            }
+        }
     }
 
     private var pinnedBinding: Binding<Bool> {
