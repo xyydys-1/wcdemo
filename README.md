@@ -1,6 +1,6 @@
 # WeChat26Demo 0.3.2 — 系统菜单与 SwiftUI 照片布局
 
-本包为 compilefix1：在 PhotoLayoutMetrics.swift 和 Tests/PhotoLayoutTests.swift 显式导入 CoreGraphics，修复 macOS 独立测试编译时 CGRect 初始化器不可见的问题。应用版本、构建号和全部布局／交互／存档逻辑保持原样；构建测试步骤继续保留。
+本包为 compilefix2：保留 CoreGraphics 导入修复，并将照片布局测试的比例常量明确声明为 CGFloat、数组声明为 [CGFloat]，消除 zip 中混合数值数组被推断为 [Any] 的编译错误。布局输入与断言复用同一数组，保留全部测试。输入框、动画、存档、版本号和构建号保持不变。
 
 在 0.3.1 compilefix1 上继续修改，最低 iOS 26.0、arm64，构建号 7。Bundle ID 保持 `com.xyy.wechat26demo`。
 

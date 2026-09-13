@@ -1,44 +1,21 @@
-# 0.3.2 compilefix1 更新与编译
+# 0.3.2 compilefix2 更新与编译
 
-如果已使用 0.3.2，可直接执行以下补丁，无需重新传 ZIP：
-
-```sh
-cd /var/mobile/wcdemo-local || exit 1
-
-for f in PhotoLayoutMetrics.swift Tests/PhotoLayoutTests.swift; do
-  test -f "$f" || exit 1
-  if ! grep -q '^import CoreGraphics$' "$f"; then
-    fix_tmp=$(mktemp "${f}.fix.XXXXXX") || exit 1
-    awk 'NR == 1 { print "import CoreGraphics" } { print }' "$f" > "$fix_tmp" &&
-    mv "$fix_tmp" "$f" || exit 1
-  fi
-done
-
-git add -- PhotoLayoutMetrics.swift Tests/PhotoLayoutTests.swift || exit 1
-git diff --cached --quiet || git commit -m "Fix missing CoreGraphics imports" || exit 1
-git -c credential.helper= push origin main
-```
-
-它只给照片布局和对应测试补上 CoreGraphics 导入。输入框、照片布局公式、动画、保存逻辑和测试步骤保持原样；重复执行不会重复添加导入。
-
-以下是使用完整修复包的覆盖方式（二选一即可）：
-
-将 `WeChat26Demo_v0.3.2_NativeSwiftUI_compilefix1_flat.zip` 放到手机 `/var/mobile`，执行：
+将 `WeChat26Demo_v0.3.2_NativeSwiftUI_compilefix2_flat.zip` 放到手机 `/var/mobile`，执行：
 
 ```sh
 cd /var/mobile || exit 1
 
 test -d wcdemo-local/.git || exit 1
-mkdir -p wcdemo-v032-fix1
-unzip -oq WeChat26Demo_v0.3.2_NativeSwiftUI_compilefix1_flat.zip -d wcdemo-v032-fix1 || exit 1
-cp -a wcdemo-v032-fix1/. wcdemo-local/ || exit 1
+mkdir -p wcdemo-v032-fix2
+unzip -oq WeChat26Demo_v0.3.2_NativeSwiftUI_compilefix2_flat.zip -d wcdemo-v032-fix2 || exit 1
+cp -a wcdemo-v032-fix2/. wcdemo-local/ || exit 1
 
 cd /var/mobile/wcdemo-local || exit 1
 rm -f ElasticPhotoStack.swift StackSpring.swift Tests/MigrationAndMotionTests.swift
 
 git status --short
 git add -A || exit 1
-git diff --cached --quiet || git commit -m "Fix CoreGraphics imports for photo layout tests" || exit 1
+git diff --cached --quiet || git commit -m "Fix CGFloat types in photo layout tests" || exit 1
 git -c credential.helper= push origin main
 ```
 
