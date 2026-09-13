@@ -60,15 +60,14 @@ struct ChatView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            ToolbarItem(id: "chat.search", placement: .topBarTrailing) {
+            // One native glass group can contract back to the root's single button.
+            // No separate backgrounds, spacer or manually animated opacity.
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { showSearch = true } label: {
                     Image(systemName: "magnifyingglass").foregroundStyle(.primary)
                         .frame(width: 24, height: 24)
                 }
                 .tint(Color.primary).accessibilityLabel("查找聊天内容")
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            ToolbarItem(id: "chat.details", placement: .topBarTrailing) {
                 Button { showDetails = true } label: {
                     Image(systemName: "line.3.horizontal").foregroundStyle(.primary)
                         .frame(width: 24, height: 24)
@@ -128,26 +127,41 @@ private struct MessageRow: View {
                 Spacer()
             }.padding(.vertical, 4)
         case .text(let text):
-            bubbleRow {
-                Text(text).font(.system(size: 17)).foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 13).padding(.vertical, 10)
-                    .glassEffect(.regular.tint(message.incoming
-                        ? Color(uiColor: .secondarySystemBackground).opacity(0.72)
-                        : Color.wxBubbleGreen.opacity(0.72)),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
+            bubbleRow { textBubble(text) }
         case .photo(let key):
             bubbleRow {
-                let ratio = max(0.05, store.media.aspect(key))
-                let width = min(photoWidth - 10, 224 * ratio)
-                StoredPhoto(source: key).frame(width: width, height: width / ratio)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .onTapGesture { preview = PhotoPresentation(keys: [key]) }
+                if store.media.isReadable(key) {
+                    let ratio = max(0.05, store.media.aspect(key))
+                    let width = min(photoWidth - 10, 224 * ratio)
+                    StoredPhoto(source: key).frame(width: width, height: width / ratio)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .onTapGesture { preview = PhotoPresentation(keys: [key]) }
+                } else { textBubble("图片暂时无法读取") }
             }
         case .photoStack(let keys):
-            bubbleRow { PhotoStackMessage(keys: keys, width: photoWidth) }
+            bubbleRow {
+                let available = keys.filter { store.media.isReadable($0) }
+                if available.isEmpty { textBubble("图片暂时无法读取") }
+                else {
+                    VStack(alignment: message.incoming ? .leading : .trailing, spacing: 6) {
+                        PhotoStackMessage(keys: available, width: photoWidth)
+                        if available.count != keys.count {
+                            Text("另有 \(keys.count - available.count) 张照片暂时无法读取")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
         }
+    }
+    private func textBubble(_ text: String) -> some View {
+        Text(text).font(.system(size: 17)).foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .padding(.horizontal, 13).padding(.vertical, 10)
+            .glassEffect(.regular.tint(message.incoming
+                ? Color(uiColor: .secondarySystemBackground).opacity(0.72)
+                : Color.wxBubbleGreen.opacity(0.72)),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     private func bubbleRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -188,61 +202,56 @@ private struct ChatComposer: View {
     private var panelAnimation: Animation { reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.46, bounce: 0.14) }
 
     var body: some View {
-        // Keep the 0.2.0 three-piece composer: same controls, spacing, frames and glass.
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 10) {
-                Button { inputFocused = true } label: {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 50, height: 50)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: Circle())
-
-                HStack(spacing: 9) {
-                    TextField("", text: $input)
-                        .foregroundStyle(.primary)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.send)
-                        .onSubmit(send)
-                        .focused($inputFocused)
-                    Image(systemName: "face.smiling")
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .glassEffect(.regular.interactive(), in: Capsule())
-
-                Button {
-                    inputFocused = false
-                    withAnimation(panelAnimation) { showPlus.toggle() }
-                } label: {
-                    Image(systemName: "plus")
-                        .rotationEffect(.degrees(showPlus ? 45 : 0))
-                        .font(.system(size: 21, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 50, height: 50)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: Circle())
-                .accessibilityLabel(showPlus ? "收起附件" : "添加附件")
-                .disabled(importing)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
+        VStack(spacing: 8) {
             if showPlus {
                 PlusPanel(onAction: attachmentAction)
-                    .frame(maxWidth: 340)
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 64)
-                    .transition(reduceMotion ? .opacity : .modifier(
-                        active: AttachmentReveal(progress: 0), identity: AttachmentReveal(progress: 1)))
-                    .zIndex(2)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+            // Keep the 0.2.0 three-piece composer: same controls, spacing, frames and glass.
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 10) {
+                    Button { inputFocused = true } label: {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 50, height: 50)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
+
+                    HStack(spacing: 9) {
+                        TextField("", text: $input)
+                            .foregroundStyle(.primary)
+                            .textInputAutocapitalization(.never)
+                            .submitLabel(.send)
+                            .onSubmit(send)
+                            .focused($inputFocused)
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .glassEffect(.regular.interactive(), in: Capsule())
+
+                    Button {
+                        inputFocused = false
+                        withAnimation(panelAnimation) { showPlus.toggle() }
+                    } label: {
+                        Image(systemName: "plus")
+                            .rotationEffect(.degrees(showPlus ? 45 : 0))
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 50, height: 50)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .accessibilityLabel(showPlus ? "收起附件" : "添加附件")
+                    .disabled(importing)
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -306,53 +315,56 @@ private struct ChatComposer: View {
     }
 }
 
-private struct AttachmentReveal: ViewModifier, Animatable {
-    var progress: CGFloat
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-    func body(content: Content) -> some View {
-        content.scaleEffect(x: 0.12 + 0.88 * progress, y: 0.15 + 0.85 * progress, anchor: .bottomTrailing)
-            .blur(radius: (1 - progress) * 7).opacity(Double(progress))
-            .offset(y: (1 - progress) * 46)
-    }
-}
-
 private enum AttachmentAction: Int, CaseIterable, Identifiable {
     case photos, camera, video, location, envelope, transfer, gift, dictation
     var id: Int { rawValue }
-    var title: String { ["照片", "拍摄", "语音电话", "位置", "红包", "转账", "礼物", "语音输入"][rawValue] }
-    var symbol: String { ["photo.fill", "camera.fill", "video.fill", "location.fill",
-        "wallet.bifold.fill", "arrow.left.arrow.right", "gift.fill", "mic.fill"][rawValue] }
+    var title: String { ["照片", "拍摄", "视频通话", "位置", "红包", "转账", "礼物", "语音输入"][rawValue] }
+    var symbol: String { ["photo.on.rectangle", "camera.fill", "video.fill", "location.fill",
+        "envelope.fill", "arrow.left.arrow.right", "gift.fill", "waveform"][rawValue] }
+    var color: Color {
+        let colors: [Color] = [.blue, .indigo, .green, .green, .red, .orange, .pink, .blue]
+        return colors[rawValue]
+    }
 }
 
 @available(iOS 26.0, *)
 private struct PlusPanel: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let onAction: (AttachmentAction) -> Void
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 14) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
             ForEach(AttachmentAction.allCases) { item in
                 Button { onAction(item) } label: {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 8) {
                         Image(systemName: item.symbol)
-                            .font(.system(size: 21, weight: .medium))
-                            .frame(width: 50, height: 50, alignment: .center)
-                            .background(.primary.opacity(scheme == .dark ? 0.09 : 0.055),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        Text(item.title).font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.85)
+                            .resizable().scaledToFit()
+                            .frame(width: 25, height: 25)
+                            .foregroundStyle(item.color)
+                        Text(item.title).font(.system(size: 11, weight: .medium))
+                            .lineLimit(1).minimumScaleFactor(0.85)
                     }
-                    .foregroundStyle(.primary).frame(maxWidth: .infinity).contentShape(Rectangle())
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity).frame(height: 78)
+                    // One continuous glass surface, eight inset translucent tiles.
+                    // The label and icon share the tile instead of floating outside it.
+                    .background {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(reduceTransparency
+                                ? Color(uiColor: .secondarySystemGroupedBackground)
+                                : Color.primary.opacity(scheme == .dark ? 0.14 : 0.065))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(.white.opacity(scheme == .dark ? 0.10 : 0.3), lineWidth: 0.5)
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(AttachmentButtonStyle())
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 22)
-        .glassEffect(.regular.tint(Color(uiColor: .secondarySystemBackground).opacity(0.25)),
-            in: RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 18, y: 8)
+        .padding(12)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
     }
 }
 

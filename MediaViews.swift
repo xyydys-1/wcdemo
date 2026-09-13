@@ -8,6 +8,7 @@ final class LocalMediaFiles: @unchecked Sendable {
     let directory: URL
     private let cache = NSCache<NSString, UIImage>()
     private let aspectCache = NSCache<NSString, NSNumber>()
+    private let readableCache = NSCache<NSString, NSNumber>()
     init(directory: URL) {
         self.directory = directory
         cache.totalCostLimit = 48 * 1024 * 1024
@@ -21,6 +22,16 @@ final class LocalMediaFiles: @unchecked Sendable {
         }
         return Bundle.main.url(forResource: key, withExtension: "jpg")
             ?? Bundle.main.url(forResource: key, withExtension: "png")
+            ?? Bundle.main.url(forResource: key, withExtension: "jpg", subdirectory: "Resources")
+            ?? Bundle.main.url(forResource: key, withExtension: "png", subdirectory: "Resources")
+    }
+
+    func isReadable(_ key: String) -> Bool {
+        if let result = readableCache.object(forKey: key as NSString) { return result.boolValue }
+        // Check once at thumbnail size; corrupt files never become giant empty bubbles.
+        let result = image(key, maxPixel: 96) != nil
+        readableCache.setObject(NSNumber(value: result), forKey: key as NSString)
+        return result
     }
 
     func image(_ key: String, maxPixel: Int = 800) -> UIImage? {
@@ -153,23 +164,31 @@ struct PhotoStackMessage: View {
     @State private var expanded = false
     @State private var frontIndex = 0
     @State private var preview: PhotoPresentation?
-    @GestureState private var dragX: CGFloat = 0
 
     private var columns: Int { keys.count > 4 ? 3 : 2 }
     private var cellSide: CGFloat { (width - CGFloat(columns - 1) * 9) / CGFloat(columns) }
-    private var gridHeight: CGFloat { CGFloat((keys.count + columns - 1) / columns) * (cellSide + 9) + 30 }
-    private var deckHeight: CGFloat {
-        min(244, keys.map { fitted($0, maxWidth: width - 30, maxHeight: 224).height }.max() ?? 160) + 16
+    private var gridHeight: CGFloat {
+        let rows = (keys.count + columns - 1) / columns
+        return CGFloat(rows) * cellSide + CGFloat(max(0, rows - 1)) * 9 + 40
     }
-    private var animation: Animation { reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.48, bounce: 0.17) }
+    private var deckHeight: CGFloat {
+        keys.map { key in
+            let ratio = max(0.05, store.media.aspect(key))
+            return min(width - 30, 224 * ratio) / ratio
+        }.max().map { $0 + 28 } ?? 188
+    }
+    private var animation: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.48, bounce: 0.16)
+    }
 
     var body: some View {
-        ZStack {
-            ForEach(keys.indices, id: \.self) { index in
-                let relative = relativeIndex(index)
-                if expanded || relative < 5 { card(index, relative: relative) }
-            }
-        }
+        ElasticPhotoDeck(media: store.media, keys: keys, width: width,
+            expanded: expanded, frontIndex: frontIndex, reduceMotion: reduceMotion,
+            onExpand: { withAnimation(animation) { expanded = true } },
+            onSelect: { index in
+                withAnimation(animation) { frontIndex = index; expanded = false }
+            },
+            onPreview: { preview = PhotoPresentation(keys: keys, index: $0) })
         .frame(width: width, height: expanded ? gridHeight : deckHeight)
         .overlay(alignment: .bottom) {
             if expanded {
@@ -180,71 +199,23 @@ struct PhotoStackMessage: View {
                 .buttonStyle(.plain).glassEffect(.regular.interactive(), in: Capsule())
             }
         }
-        .contentShape(Rectangle())
-        .simultaneousGesture(DragGesture(minimumDistance: 16)
-            .updating($dragX) { value, state, _ in
-                guard !expanded, abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
-                state = min(110, max(-110, value.translation.width))
-            }
-            .onEnded { value in
-                guard !expanded, keys.count > 1,
-                    abs(value.translation.width) > abs(value.translation.height) * 1.2,
-                    abs(value.predictedEndTranslation.width) > 45 else { return }
-                withAnimation(animation) {
-                    frontIndex = normalized(frontIndex + (value.translation.width < 0 ? 1 : -1))
-                }
-            })
-        .animation(animation, value: expanded)
-        .animation(animation, value: frontIndex)
-        .animation(animation, value: dragX == 0)
-        .contextMenu {
-            Button("查看大图", systemImage: "arrow.up.left.and.arrow.down.right") {
-                preview = PhotoPresentation(keys: keys, index: frontIndex)
-            }
-            Button(expanded ? "收起照片" : "展开全部照片", systemImage: "square.grid.3x3") {
-                withAnimation(animation) { expanded.toggle() }
+        .fullScreenCover(item: $preview) { NativePhotoPreview(presentation: $0).ignoresSafeArea() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(keys.count)张照片，第\(frontIndex + 1)张在最上面")
+        .accessibilityHint("轻点展开，横向拖动翻动，长按查看大图")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { withAnimation(animation) { expanded.toggle() } }
+        .accessibilityAction(named: Text("查看大图")) {
+            preview = PhotoPresentation(keys: keys, index: frontIndex)
+        }
+        .accessibilityAdjustableAction { direction in
+            guard !keys.isEmpty else { return }
+            switch direction {
+            case .increment: frontIndex = (frontIndex + 1) % keys.count
+            case .decrement: frontIndex = (frontIndex + keys.count - 1) % keys.count
+            @unknown default: break
             }
         }
-        .fullScreenCover(item: $preview) { NativePhotoPreview(presentation: $0).ignoresSafeArea() }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(keys.count)张照片，轻点展开，左右滑动翻动，长按查看大图")
-    }
-
-    private func card(_ index: Int, relative: Int) -> some View {
-        let size = fitted(keys[index], maxWidth: expanded ? cellSide : width - 30,
-                          maxHeight: expanded ? cellSide : 224)
-        let x = expanded ? -width / 2 + cellSide / 2 + CGFloat(index % columns) * (cellSide + 9)
-            : [CGFloat(0), 6, -8, 3, -4][min(relative, 4)]
-        let y = expanded ? -gridHeight / 2 + cellSide / 2 + CGFloat(index / columns) * (cellSide + 9)
-            : [CGFloat(2), -7, 3, -11, -3][min(relative, 4)]
-        let angle = expanded || reduceMotion ? 0 : [-4.0, 5.0, -10.0, 3.0, -2.0][min(relative, 4)]
-        return StoredPhoto(source: keys[index], maxPixel: expanded ? 384 : 800)
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: expanded ? 8 : 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: expanded ? 8 : 13)
-                .stroke(.white.opacity(0.18), lineWidth: 0.5))
-            .shadow(color: .black.opacity(expanded ? 0.08 : 0.2), radius: expanded ? 2 : 4, y: 2)
-            .scaleEffect(expanded ? 1 : 1 - CGFloat(min(relative, 4)) * 0.022)
-            .rotationEffect(.degrees(angle + (relative == 0 && !expanded && !reduceMotion ? Double(dragX / 22) : 0)))
-            .offset(x: x + (!expanded ? dragX * (relative == 0 ? 0.8 : 0.06) : 0), y: y)
-            .zIndex(Double(keys.count - relative))
-            .onTapGesture {
-                withAnimation(animation) {
-                    if expanded { frontIndex = index; expanded = false }
-                    else { expanded = true }
-                }
-            }
-            .accessibilityLabel("照片 \(index + 1)")
-    }
-    private func normalized(_ index: Int) -> Int {
-        guard !keys.isEmpty else { return 0 }
-        return (index % keys.count + keys.count) % keys.count
-    }
-    private func relativeIndex(_ index: Int) -> Int { normalized(index - frontIndex) }
-    private func fitted(_ key: String, maxWidth: CGFloat, maxHeight: CGFloat) -> CGSize {
-        let ratio = max(0.05, store.media.aspect(key))
-        let width = min(maxWidth, maxHeight * ratio)
-        return CGSize(width: width, height: width / ratio)
     }
 }
 

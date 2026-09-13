@@ -15,7 +15,7 @@ enum DemoSeed {
         var chats = [
             DemoChat(id: "blackshore", title: "黑海岸小分队", subtitle: "岸宝: 今晚继续行动", time: "17:18", unread: 2, avatarSymbol: "person.3.fill", avatarColor: .indigo, isGroup: true),
             DemoChat(id: "family", title: "相亲相爱一家人", subtitle: "妈妈: 记得早点休息", time: "17:17", unread: 1, avatarSymbol: "house.fill", avatarColor: .orange, isGroup: true),
-            DemoChat(id: "xixi", title: "汐汐", subtitle: "图片", time: "17:15", unread: 0, avatarSymbol: "sparkles", avatarColor: .pink),
+            DemoChat(id: "xixi", title: "汐汐", subtitle: "好呀，晚点见！", time: "17:15", unread: 0, avatarSymbol: "sparkles", avatarColor: .pink),
             DemoChat(id: "jinzhou", title: "今州小分队", subtitle: "秋水: 收到", time: "14:00", unread: 0, avatarSymbol: "person.2.fill", avatarColor: .green, isGroup: true),
             DemoChat(id: "qiuqiu", title: "七丘行动-残星会", subtitle: "会议时间改到晚上", time: "22:03", unread: 0, avatarSymbol: "star.circle.fill", avatarColor: .red, isGroup: true),
             DemoChat(id: "xiaoka", title: "小卡", subtitle: "好耶！", time: "17:08", unread: 1, avatarSymbol: "heart.fill", avatarColor: .purple),
@@ -26,27 +26,26 @@ enum DemoSeed {
         var messages: [String: [DemoMessage]] = [:]
         messages["xixi"] = [
             DemoMessage(senderID: nil, incoming: false, kind: .time("17:11")),
-            DemoMessage(senderID: "xixi", incoming: true, kind: .photo("photo_avatar")),
+            DemoMessage(senderID: "xixi", incoming: true, kind: .text("今天想去哪里逛逛？")),
             DemoMessage(senderID: nil, incoming: false, kind: .time("17:12")),
-            DemoMessage(senderID: "me", incoming: false, kind: .photoStack(["photo_7", "photo_9", "photo_8", "photo_6"])),
+            DemoMessage(senderID: "me", incoming: false, kind: .text("一起去海边走走吧。")),
             DemoMessage(senderID: "me", incoming: false, kind: .text("怎么样？")),
             DemoMessage(senderID: nil, incoming: false, kind: .time("17:15")),
-            DemoMessage(senderID: "xixi", incoming: true, kind: .photo("photo_chibi"))
+            DemoMessage(senderID: "xixi", incoming: true, kind: .text("好呀，晚点见！"))
         ]
 
         messages["shore"] = [
             DemoMessage(senderID: nil, incoming: false, kind: .time("2026年6月29日 12:00")),
             DemoMessage(senderID: "shore", incoming: true, kind: .text("欢迎回家！")),
-            DemoMessage(senderID: "shore", incoming: true, kind: .photo("photo_avatar")),
-            DemoMessage(senderID: "me", incoming: false, kind: .photoStack(["photo_12", "photo_10", "photo_8"])),
-            DemoMessage(senderID: nil, incoming: false, kind: .time("22:10"))
+            DemoMessage(senderID: "shore", incoming: true, kind: .text("今天过得怎么样？")),
+            DemoMessage(senderID: "me", incoming: false, kind: .text("一切顺利，晚点聊。"))
         ]
 
         messages["blackshore"] = [
             DemoMessage(senderID: nil, incoming: false, kind: .time("22:09")),
             DemoMessage(senderID: "xixi", incoming: true, kind: .text("今晚继续行动吗？")),
             DemoMessage(senderID: "me", incoming: false, kind: .text("可以")),
-            DemoMessage(senderID: "shore", incoming: true, kind: .photo("photo_12"))
+            DemoMessage(senderID: "shore", incoming: true, kind: .text("那我们晚点集合。"))
         ]
 
         messages["family"] = [
@@ -77,10 +76,52 @@ enum DemoSeed {
                 DemoMessage(senderID: sender, incoming: true, kind: .text(text))
             ]
         }
-        // Sample thumbnails are square crops, so their presentation uses reference aspect hints.
-        messages["xixi"]?[3].kind = .photoStack(["photo_9", "photo_10", "photo_11", "photo_12", "photo_8", "photo_7"])
         var archive = DemoArchive()
+        archive.demoContentRevision = DemoHistoryMigration.currentRevision
         archive.chats = chats; archive.contacts = contacts; archive.messages = messages
         return archive
+    }
+}
+
+enum DemoHistoryMigration {
+    static let currentRevision = 1
+    private static let sampleKeys = Set((1...15).map { "photo_\($0)" } + ["photo_avatar", "photo_chibi"])
+
+    // Rewrite only the old bundled examples, in place. Local imports, message IDs,
+    // names, avatars, settings, cleared conversations and user text remain intact.
+    @discardableResult
+    static func apply(to archive: inout DemoArchive) -> Bool {
+        guard (archive.demoContentRevision ?? 0) < currentRevision else { return false }
+        for chatID in Array(archive.messages.keys) {
+            guard var messages = archive.messages[chatID] else { continue }
+            var replacedExample = false
+            for index in messages.indices {
+                let keys = messages[index].kind.photoKeys
+                guard keys.contains(where: sampleKeys.contains) else { continue }
+                replacedExample = true
+                let retained = keys.filter { !sampleKeys.contains($0) }
+                if retained.count == 1 { messages[index].kind = .photo(retained[0]) }
+                else if !retained.isEmpty { messages[index].kind = .photoStack(retained) }
+                else { messages[index].kind = .text(replacement(chatID, message: messages[index], keys: keys)) }
+            }
+            // An old example ended in a timestamp with no following message.
+            if replacedExample {
+                while let last = messages.last, case .time = last.kind { messages.removeLast() }
+            }
+            archive.messages[chatID] = messages
+        }
+        archive.demoContentRevision = currentRevision
+        return true
+    }
+
+    private static func replacement(_ chatID: String, message: DemoMessage, keys: [String]) -> String {
+        switch chatID {
+        case "xixi":
+            if !message.incoming { return "一起去海边走走吧。" }
+            return keys.contains("photo_chibi") ? "好呀，晚点见！" : "今天想去哪里逛逛？"
+        case "shore": return message.incoming ? "今天过得怎么样？" : "一切顺利，晚点聊。"
+        case "blackshore": return "那我们晚点集合。"
+        default: return message.incoming ? "晚点见！" : "好，晚点聊。"
+        }
     }
 }

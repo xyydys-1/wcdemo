@@ -1,28 +1,27 @@
-# GitHub 编译说明
+# 0.3.1 更新与编译
 
-这个工程最适合直接交给 GitHub Actions 编译，因为 Windows 本地没有 Apple iOS 26 SDK/Xcode。
+将 `WeChat26Demo_v0.3.1_ElasticStack_flat.zip` 放在手机 `/var/mobile`，在终端执行：
 
-## 最短步骤
+```sh
+cd /var/mobile || exit 1
 
-1. GitHub 新建一个空仓库，例如 `WeChat26Demo`。
-2. 把本 ZIP 解压后的所有内容上传到仓库根目录。
-   - `.github` 目录必须保留。
-   - `Makefile` 必须位于仓库根目录。
-3. 提交到 `main`。
-4. 打开仓库的 `Actions`。
-5. 点 `Build WeChat26Demo iOS 26`。
-6. 构建成功后，在页面底部 `Artifacts` 下载：
-   `WeChat26Demo-iOS26-unsigned-ipa`。
-7. 解压 artifact 得到 `.ipa`。
-8. 该 IPA 是 unsigned，按你自己的证书/描述文件方式签名后安装。
+test -d wcdemo-local/.git || exit 1
+mkdir -p wcdemo-v031
+unzip -oq WeChat26Demo_v0.3.1_ElasticStack_flat.zip -d wcdemo-v031 || exit 1
+cp -a wcdemo-v031/. wcdemo-local/ || exit 1
 
-## 为什么不用 Windows 直接编译
+cd /var/mobile/wcdemo-local || exit 1
 
-Swift 语言本身能在 Windows/Linux 使用，但 iOS App 依赖 Apple 的 UIKit、SwiftUI 和 iPhoneOS SDK，
-正式构建仍需要 macOS/Xcode 工具链。GitHub 的 macOS runner 正好解决这一点。
+git status --short
+git add -A || exit 1
+git diff --cached --quiet || git commit -m "WeChat26Demo 0.3.1 native toolbar and elastic photo stack" || exit 1
+git -c credential.helper= push origin main
+```
 
-## 0.3.0 更新方式
+这是覆盖源代码并触发 GitHub 编译的指令。工作流沿用原仓库的 macOS / Xcode 26 配置。提交到 main 后进入仓库 Actions，打开 `Build WeChat26Demo iOS 26`，成功后从 Artifacts 下载 `WeChat26Demo-iOS26-unsigned-ipa`，解压并用原方式签名、覆盖安装。
 
-本次压缩包为平铺工程，直接覆盖原仓库的工程文件。新增 `LocalData.swift`、`DemoSeed.swift`、`MediaViews.swift`、`ProfileViews.swift`、`Tests/LocalDataTests.swift`，必须一并上传；Makefile 已包含所有应用源文件。工作流新增本地数据回读测试，会在打包前执行。
+最后一行临时禁用截图中缺失的 credential helper；如询问密码，应填写有该仓库写权限的 GitHub token，而非账号密码。本次更新包含工作流文件，token 也需要允许更新工作流。不要把 token 写进工程或提交记录。
 
-应用版本为 0.3.0 / 构建号 5，Bundle ID 与旧版一致。无需更改原签名方式。
+压缩包是平铺工程，Makefile 和 `.github` 位于包根目录。新增的 `StackSpring.swift`、`ElasticPhotoStack.swift`、`Tests/MigrationAndMotionTests.swift` 必须一起复制；上面的 `cp -a .../.` 已包含它们。
+
+应用版本 0.3.1 / 构建号 6，Bundle ID `com.xyy.wechat26demo` 保持一致。覆盖安装后自动迁移预置历史，不需要删除应用或清空存档。代码仓库在 `/var/mobile/wcdemo-local`；个人聊天记录在已安装应用自己的数据目录里，两者分开。

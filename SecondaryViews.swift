@@ -8,16 +8,16 @@ struct ContactsView: View {
         NavigationStack {
             List {
                 Section {
-                    Label("新的朋友", systemImage: "person.badge.plus")
+                    ContactActionLabel(title: "新的朋友", symbol: "person.badge.plus")
                     NavigationLink {
                         List(store.chats.filter(\.isGroup)) { chat in
                             NavigationLink { ChatView(chatID: chat.id) } label: {
                                 HStack(spacing: 12) { ProfileAvatar(id: chat.id, size: 42); Text(chat.title) }
                             }
                         }.navigationTitle("群聊").toolbar(.hidden, for: .tabBar)
-                    } label: { Label("群聊", systemImage: "person.3.fill") }
-                    Label("标签", systemImage: "tag.fill")
-                    Label("服务号", systemImage: "bag.fill")
+                    } label: { ContactActionLabel(title: "群聊", symbol: "person.3.fill") }
+                    ContactActionLabel(title: "标签", symbol: "tag.fill")
+                    ContactActionLabel(title: "服务号", symbol: "bag.fill")
                 }
 
                 Section("我的企业") {
@@ -34,8 +34,15 @@ struct ContactsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("通讯录")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink { AddFriendView() } label: { Image(systemName: "person.badge.plus") }
+                ToolbarItem(id: "contacts.add", placement: .topBarTrailing) {
+                    NavigationLink { AddFriendView() } label: {
+                        Image(systemName: "person.badge.plus")
+                            .resizable().scaledToFit()
+                            .frame(width: 21, height: 21)
+                            .offset(x: -0.5, y: -0.5)
+                            .frame(width: 24, height: 24)
+                    }
+                    .accessibilityLabel("添加朋友")
                 }
             }
         }
@@ -49,6 +56,21 @@ struct ContactsView: View {
                 ProfileAvatar(id: contact.id, size: 42)
                 Text(contact.name)
             }
+        }
+    }
+}
+
+private struct ContactActionLabel: View {
+    let title: String
+    let symbol: String
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: symbol).resizable().scaledToFit()
+                .frame(width: 23, height: 23)
+                .frame(width: 28, height: 28)
+                .foregroundStyle(Color.wxGreen)
         }
     }
 }

@@ -93,9 +93,8 @@ struct ChatsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("微信")
             .toolbar {
-                // The root contributes exactly one item, and none while a destination is active.
-                // Distinct IDs + system spacers let NavigationStack own push/pop/cancel transitions.
-                if path.isEmpty {
+                // Keep the root item alive throughout interactive push/pop. NavigationStack
+                // chooses each page's toolbar and animates its native glass background.
                 ToolbarItem(id: "chats.add", placement: .topBarTrailing) {
                     Menu {
                         Button("发起群聊", systemImage: "bubble.left.and.bubble.right.fill") { path.append(.quick(.newGroup)) }
@@ -108,7 +107,6 @@ struct ChatsView: View {
                             .frame(width: 24, height: 24)
                     }
                     .tint(Color.primary)
-                }
                 }
             }
             .navigationDestination(for: ChatRoute.self) { route in

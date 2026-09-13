@@ -81,6 +81,8 @@ struct DemoChat: Identifiable, Codable {
 
 struct DemoArchive: Codable {
     var schemaVersion = 1
+    // Optional for decoding 0.3.0 archives without resetting any user data.
+    var demoContentRevision: Int?
     var chats: [DemoChat] = []
     var contacts: [DemoContact] = []
     var me = DemoContact(id: "me", name: "漂泊者", symbol: "person.fill", color: .blue)

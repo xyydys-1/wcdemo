@@ -26,6 +26,11 @@ final class DemoStore: ObservableObject {
         do {
             if let saved = try archiveFile.load() {
                 state = saved.archive
+                var migrated = saved.archive
+                if DemoHistoryMigration.apply(to: &migrated) {
+                    try archiveFile.save(migrated)
+                    state = migrated
+                }
                 if saved.recovered { errorMessage = "已从上一次完整保存中恢复本地记录。" }
             } else {
                 let initial = DemoSeed.make()
@@ -285,7 +290,9 @@ struct ProfileAvatar: View {
                     if let key = person.avatarKey, let image = store.media.image(key, maxPixel: 128) {
                         Image(uiImage: image).resizable().scaledToFill()
                     } else { DemoAvatar(symbol: person.symbol, color: person.color, size: side) }
-                }.frame(width: side, height: side).clipped()
+                }
+                .frame(width: side, height: side)
+                .clipShape(RoundedRectangle(cornerRadius: side * 0.24, style: .continuous))
             }
         }
         .frame(width: size, height: size).background(Color(uiColor: .tertiarySystemFill))

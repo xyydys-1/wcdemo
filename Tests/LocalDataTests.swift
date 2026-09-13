@@ -3,6 +3,8 @@ import Foundation
 @main
 struct LocalDataTests {
     static func main() throws {
+        try migrationTests()
+        try springTests()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("WeChat26Tests-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let file = LocalArchiveFile(directory: root)
@@ -13,6 +15,8 @@ struct LocalDataTests {
             try expect(original.messages[chat.id]?.contains { !$0.kind.summary.isEmpty } == true,
                        "Seeded preview must point to real messages: \(chat.id)")
         }
+        try expect(original.messages.values.flatMap { $0 }.allSatisfy { $0.kind.photoKeys.isEmpty },
+                   "Preloaded history contains text and timestamps only")
         let keys = (0..<12).map { "local:photo-\($0).jpg" }
         let message = DemoMessage(senderID: "me", incoming: false, kind: .photoStack(keys))
         original.messages["shore", default: []].append(message)
@@ -74,7 +78,7 @@ struct LocalDataTests {
             throw Failure("Write failures must be surfaced")
         } catch is Failure { throw Failure("Write failures must be surfaced") }
         catch { }
-        print("PASS: disk round-trip, avatars/names/settings/drafts, photo order, stable IDs, isolated chats, empty-state retention, recovery, future-version guard, write failure")
+        print("PASS: text-only examples, 0.3.0 migration, spring response, disk round-trip, avatars/names/settings/drafts, photo order, stable IDs, isolated chats, empty-state retention, recovery, future-version guard, write failure")
     }
 
     struct Failure: Error { let description: String; init(_ description: String) { self.description = description } }
