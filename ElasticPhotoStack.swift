@@ -259,7 +259,7 @@ final class ElasticPhotoDeckView: UIView, UIGestureRecognizerDelegate {
         ordered.contains { card in card.alpha > 0.05 && card.bounds.contains(card.convert(point, from: self)) }
     }
 
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === pan else { return true }
         let velocity = pan.velocity(in: self)
         return !expanded && keys.count > 1 && abs(velocity.x) > abs(velocity.y) * 1.2
