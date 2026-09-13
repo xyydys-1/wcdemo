@@ -60,34 +60,4 @@ extension LocalDataTests {
         try expect(reopened.messages["xixi"]?.map(\.id) == rows.map(\.id), "Migrated history survives restart")
     }
 
-    static func springTests() throws {
-        var sixty = StackSpring(), oneTwenty = StackSpring()
-        sixty.target = 80; oneTwenty.target = 80
-        for _ in 0..<15 { sixty.advance(1.0 / 60) }
-        for _ in 0..<30 { oneTwenty.advance(1.0 / 120) }
-        try expect(abs(sixty.value - oneTwenty.value) < 0.000001
-                   && abs(sixty.velocity - oneTwenty.velocity) < 0.000001,
-                   "Spring response depends on elapsed time, not refresh rate")
-
-        var recoil = StackSpring(50)
-        recoil.target = 0
-        var crossedRest = false
-        for _ in 0..<180 {
-            recoil.advance(1.0 / 120, frequency: 4.4, damping: 0.56)
-            crossedRest = crossedRest || recoil.value < 0
-            try expect(recoil.value.isFinite && recoil.velocity.isFinite, "Elastic recoil remains finite")
-        }
-        try expect(crossedRest && recoil.isSettled(), "Lower cards overshoot gently and settle to rest")
-
-        var critical = StackSpring()
-        critical.target = 1
-        var previous = 0.0
-        for _ in 0..<60 {
-            critical.advance(1.0 / 30, damping: 1)
-            try expect(critical.value >= previous - 0.000001 && critical.value <= 1.000001,
-                       "Critical damping keeps opacity transitions monotonic without flashes")
-            previous = critical.value
-        }
-        try expect(critical.isSettled(), "Opacity transition settles and lets the display link stop")
-    }
 }

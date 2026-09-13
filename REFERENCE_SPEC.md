@@ -1,23 +1,28 @@
-# 本轮视频对照与实现位置
+# 0.3.2 视频对照与公开 API
 
-本轮参考：用户提供的 79.07 秒视频，512×910，30fps。
+本轮参考 `video_1789244789965(2).mp4`：77.10 秒、512×910、30fps。检查了全片关键位置、3.60–4.37 秒连续 24 帧的展开过程、7.20–7.87 秒连续 21 帧的回弹过程，以及 52.7–55.2 秒的附件收展。
 
-| 需求 | 处理 | 文件 |
-| --- | --- | --- |
-| 列表一个按钮与聊天两个按钮切换 | 导航路径控制根工具栏，稳定项目 ID、系统工具栏间隔、系统返回手势 | RootViews.swift / ChatViews.swift |
-| 附件动画与布局 | 四列两行、单一圆角面板、方形图标底座、加号附近收展；输入栏维持原外观 | ChatViews.swift |
-| 多图混合比例、叠牌、展开、翻动 | 自定义 SwiftUI 排列与弹簧；图片比例缓存；展开显示全部；横向手势判定 | MediaViews.swift |
-| 本机图库与原生大图查看 | PhotosPicker / Quick Look | ChatViews.swift / MediaViews.swift |
-| 自己、联系人、群资料 | 单一资料来源、系统图库、原生 Form | ProfileViews.swift / Models.swift |
-| 本地笔记与设置保存 | Codable 存档、独立图片副本、原子替换、备份回读 | LocalData.swift / Models.swift |
+| 视频观察 | 本轮实现 |
+| --- | --- |
+| 3.7–4.2 秒：六张照片从中心分散到三列两行，横图行更矮 | AnyLayout 保留视图身份，PhotoRowsLayout 按每行最大实际高度排列 |
+| 约 70 秒：四张同样用三列，首行竖图居中，末张留在下一行左侧 | 三张及以上固定三列；格内保留照片比例并居中 |
+| 下层照片偏模糊，松手后不同层依次追上 | SwiftUI blur 与不同响应的 interactiveSpring / interpolatingSpring |
+| 照片边缘能与背景区分，旋转后仍平滑 | 连续圆角、抗锯齿裁切、细内描边、带透明采样边的 drawingGroup |
+| 52.7–55.2 秒：附件表面展开后更厚，图标下方有独立标题，收展伴随模糊 | 改用真正 Menu 与两个 ControlGroup；材质、收展和分组呈现由系统负责 |
+| 视频中输入栏本身也参与附件形变 | 本轮按用户明确要求保持现有输入框；Menu 从独立的加号按钮打开 |
 
-视频约 0–17 秒与 69–79 秒展示多图叠牌和翻动，约 55–57 秒与 66–68 秒展示附件面板。保留现有输入框是本轮明确约束，因此附件面板浮在原输入栏上方。视频中其它页面的布局没有整页重建。
+视频只能显示结果，无法确认作者具体使用了哪些私有或自定义代码。固定四列图标底座加下方标题，不等于系统 Menu 在所有设备上都会采用的布局。本轮优先系统菜单呈现，保留操作的语义标题，接受系统按空间和辅助功能自适应。
 
-叠牌由 SwiftUI 实现；系统图库与大图预览采用公开原生组件。参考的 Apple 公开接口：
+照片的层深、角度、描边与布局参数仍属于项目实现。它们使用 SwiftUI 提供的渲染、布局及动画能力，不是调用一个现成的“苹果聊天叠牌”。
 
-- [ToolbarSpacer](https://developer.apple.com/documentation/swiftui/toolbarspacer)
-- [Liquid Glass 自定义视图](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)
-- [PhotosPicker](https://developer.apple.com/documentation/photosui/photospicker)
-- [Quick Look](https://developer.apple.com/documentation/quicklook/qlpreviewcontroller)
+## 苹果官方依据
 
-本轮没有 iOS 运行环境，不能据此宣称与视频逐帧一致；真机结果用于后续调整收展曲线与工具栏过渡。
+- [Populating SwiftUI menus with adaptive controls](https://developer.apple.com/documentation/swiftui/populating-swiftui-menus-with-adaptive-controls)：Menu 接受标准控件，ControlGroup 用于横向组织最多四个相关操作；menuOrder 可保持定义顺序。工程使用两个四项分组。
+- [Meet Liquid Glass, WWDC25](https://developer.apple.com/videos/play/wwdc2025/219/)：展开后的菜单会加厚表面、增加深度和阴影。玻璃用于导航与控制层；照片内容不覆盖玻璃滤镜。
+- [AnyLayout](https://developer.apple.com/documentation/swiftui/anylayout)：切换布局时保留子视图状态与身份，用于同一组图片在叠放、网格之间移动。
+- [Animate with springs, WWDC23](https://developer.apple.com/videos/play/wwdc2023/10158/)：系统弹簧支持手势速度衔接和目标改变后的连续运动。
+- [interactiveSpring](https://developer.apple.com/documentation/swiftui/animation/interactivespring(response:dampingfraction:blendduration:)) 与 [interpolatingSpring](https://developer.apple.com/documentation/swiftui/animation/interpolatingspring(duration:bounce:initialvelocity:))：分别用于持续跟手及松手后的回弹，没有自行驱动显示帧或求解弹簧。
+- [drawingGroup](https://developer.apple.com/documentation/swiftui/view/drawinggroup(opaque:colormode:))：将 SwiftUI 图片和形状合成为离屏图像，旋转前统一处理裁切与边缘。
+- [dragPreviewsFormation](https://developer.apple.com/documentation/swiftui/view/dragpreviewsformation(_:))：官方标注为 macOS 26 API，用于拖放预览，不能用于本工程的 iPhone 常驻消息叠牌。
+
+公开文档证实 API 的用途与可用性，不能证明本工程已经在真机上达到参考视频的效果。此版本仍需 iOS 26 构建与真机动画验证。

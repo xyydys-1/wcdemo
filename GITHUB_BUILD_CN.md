@@ -1,27 +1,30 @@
-# 0.3.1 更新与编译
+# 0.3.2 更新与编译
 
-将 `WeChat26Demo_v0.3.1_ElasticStack_flat.zip` 放在手机 `/var/mobile`，在终端执行：
+将 `WeChat26Demo_v0.3.2_NativeSwiftUI_flat.zip` 放到手机 `/var/mobile`，执行：
 
 ```sh
 cd /var/mobile || exit 1
 
 test -d wcdemo-local/.git || exit 1
-mkdir -p wcdemo-v031
-unzip -oq WeChat26Demo_v0.3.1_ElasticStack_flat.zip -d wcdemo-v031 || exit 1
-cp -a wcdemo-v031/. wcdemo-local/ || exit 1
+mkdir -p wcdemo-v032
+unzip -oq WeChat26Demo_v0.3.2_NativeSwiftUI_flat.zip -d wcdemo-v032 || exit 1
+cp -a wcdemo-v032/. wcdemo-local/ || exit 1
 
 cd /var/mobile/wcdemo-local || exit 1
+rm -f ElasticPhotoStack.swift StackSpring.swift Tests/MigrationAndMotionTests.swift
 
 git status --short
 git add -A || exit 1
-git diff --cached --quiet || git commit -m "WeChat26Demo 0.3.1 native toolbar and elastic photo stack" || exit 1
+git diff --cached --quiet || git commit -m "WeChat26Demo 0.3.2 native menus and SwiftUI photo layout" || exit 1
 git -c credential.helper= push origin main
 ```
 
-这是覆盖源代码并触发 GitHub 编译的指令。工作流沿用原仓库的 macOS / Xcode 26 配置。提交到 main 后进入仓库 Actions，打开 `Build WeChat26Demo iOS 26`，成功后从 Artifacts 下载 `WeChat26Demo-iOS26-unsigned-ipa`，解压并用原方式签名、覆盖安装。
+这是更新源代码并触发 GitHub Actions 编译。`rm -f` 只移除已被替换的旧叠牌实现和旧测试文件，不操作应用的聊天存档。新实现由 `NativePhotoStack.swift`、`PhotoLayoutMetrics.swift` 及对应测试组成，Makefile 和工作流清单已同步。
 
-最后一行临时禁用截图中缺失的 credential helper；如询问密码，应填写有该仓库写权限的 GitHub token，而非账号密码。本次更新包含工作流文件，token 也需要允许更新工作流。不要把 token 写进工程或提交记录。
+提交到 main 后，进入仓库 Actions → `Build WeChat26Demo iOS 26`。工作流先运行 Foundation 数据与布局测试，再编译并打包。成功后从 Artifacts 下载 `WeChat26Demo-iOS26-unsigned-ipa`，解压并用原方式签名、覆盖安装。
 
-压缩包是平铺工程，Makefile 和 `.github` 位于包根目录。新增的 `StackSpring.swift`、`ElasticPhotoStack.swift`、`Tests/MigrationAndMotionTests.swift` 必须一起复制；上面的 `cp -a .../.` 已包含它们。
+最后一行临时禁用此前缺失的 credential helper。GitHub 若询问 Password，应填写有仓库写权限的 token，不是账号密码；本次包含工作流修改，凭据还需允许修改工作流文件。不要把 token 写入代码、远程 URL 或提交记录。
 
-应用版本 0.3.1 / 构建号 6，Bundle ID `com.xyy.wechat26demo` 保持一致。覆盖安装后自动迁移预置历史，不需要删除应用或清空存档。代码仓库在 `/var/mobile/wcdemo-local`；个人聊天记录在已安装应用自己的数据目录里，两者分开。
+ZIP 内直接是工程根目录，不需要进入同名内层目录。`cp -a .../.` 会一起复制构建工作流。
+
+应用版本 0.3.2，构建号 7，Bundle ID `com.xyy.wechat26demo`。保留此 Bundle ID 并覆盖安装，继续读取现有本地消息和资料；无需清空存档。当前交付包完成源码及结构检查，尚未在本地执行 iOS 编译或真机测试。

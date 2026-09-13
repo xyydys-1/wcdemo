@@ -6,7 +6,6 @@ import UIKit
 struct ChatView: View {
     @EnvironmentObject private var store: DemoStore
     let chatID: String
-    @State private var showAttachments = false
     @State private var showDetails = false
     @State private var showSearch = false
     @State private var scrollTarget: UUID?
@@ -22,7 +21,8 @@ struct ChatView: View {
                         LazyVStack(spacing: 10) {
                             ForEach(rows) { message in
                                 MessageRow(message: message, isGroup: chat.isGroup,
-                                    photoWidth: min(252, max(130, geometry.size.width - 104)))
+                                    photoWidth: min(252, max(130, geometry.size.width - 106)),
+                                    expandedPhotoWidth: min(340, max(130, geometry.size.width - 106)))
                                     .id(message.id)
                             }
                         }
@@ -48,11 +48,6 @@ struct ChatView: View {
                         withAnimation(.smooth) { proxy.scrollTo(id, anchor: .center) }
                     }
                 }
-                if showAttachments {
-                    Color.clear.contentShape(Rectangle()).onTapGesture {
-                        withAnimation(.spring(duration: 0.42, bounce: 0.12)) { showAttachments = false }
-                    }
-                }
             }
         }
         .navigationTitle(chat.title)
@@ -76,7 +71,7 @@ struct ChatView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChatComposer(chatID: chatID, showPlus: $showAttachments)
+            ChatComposer(chatID: chatID)
                 .padding(.horizontal, 10).padding(.vertical, 6)
         }
         .sheet(isPresented: $showDetails) { NavigationStack { ChatDetailView(chatID: chatID) } }
@@ -86,7 +81,7 @@ struct ChatView: View {
             }
         }
         .onAppear { store.openChat(chatID) }
-        .onDisappear { store.flush(); showAttachments = false }
+        .onDisappear { store.flush() }
     }
 
     private var chatBackground: some View {
@@ -107,6 +102,7 @@ private struct MessageRow: View {
     let message: DemoMessage
     let isGroup: Bool
     let photoWidth: CGFloat
+    let expandedPhotoWidth: CGFloat
     @State private var preview: PhotoPresentation?
     @State private var editPerson: ProfileSelection?
 
@@ -144,7 +140,7 @@ private struct MessageRow: View {
                 if available.isEmpty { textBubble("图片暂时无法读取") }
                 else {
                     VStack(alignment: message.incoming ? .leading : .trailing, spacing: 6) {
-                        PhotoStackMessage(keys: available, width: photoWidth)
+                        PhotoStackMessage(keys: available, width: photoWidth, expandedWidth: expandedPhotoWidth)
                         if available.count != keys.count {
                             Text("另有 \(keys.count - available.count) 张照片暂时无法读取")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -189,9 +185,7 @@ private struct MessageRow: View {
 @available(iOS 26.0, *)
 private struct ChatComposer: View {
     @EnvironmentObject private var store: DemoStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let chatID: String
-    @Binding var showPlus: Bool
     @State private var input = ""
     @State private var showPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
@@ -199,14 +193,9 @@ private struct ChatComposer: View {
     @State private var showCamera = false
     @State private var notice: String?
     @FocusState private var inputFocused: Bool
-    private var panelAnimation: Animation { reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.46, bounce: 0.14) }
 
     var body: some View {
         VStack(spacing: 8) {
-            if showPlus {
-                PlusPanel(onAction: attachmentAction)
-                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-            }
             // Keep the 0.2.0 three-piece composer: same controls, spacing, frames and glass.
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 10) {
@@ -236,12 +225,23 @@ private struct ChatComposer: View {
                     .frame(height: 50)
                     .glassEffect(.regular.interactive(), in: Capsule())
 
-                    Button {
-                        inputFocused = false
-                        withAnimation(panelAnimation) { showPlus.toggle() }
+                    // Menu owns presentation, dismissal, glass thickness and morphing.
+                    // ControlGroup adapts the eight actions to the native menu layout.
+                    Menu {
+                        ControlGroup {
+                            attachmentButton(.photos)
+                            attachmentButton(.camera)
+                            attachmentButton(.video)
+                            attachmentButton(.location)
+                        }
+                        ControlGroup {
+                            attachmentButton(.envelope)
+                            attachmentButton(.transfer)
+                            attachmentButton(.gift)
+                            attachmentButton(.dictation)
+                        }
                     } label: {
                         Image(systemName: "plus")
-                            .rotationEffect(.degrees(showPlus ? 45 : 0))
                             .font(.system(size: 21, weight: .medium))
                             .foregroundStyle(.primary)
                             .frame(width: 50, height: 50)
@@ -249,7 +249,10 @@ private struct ChatComposer: View {
                     }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: Circle())
-                    .accessibilityLabel(showPlus ? "收起附件" : "添加附件")
+                    .menuOrder(.fixed)
+                    .labelStyle(.titleAndIcon)
+                    .tint(.primary)
+                    .accessibilityLabel("添加附件")
                     .disabled(importing)
                 }
             }
@@ -279,7 +282,6 @@ private struct ChatComposer: View {
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty, !importing else { return }
             importing = true
-            withAnimation(panelAnimation) { showPlus = false }
             Task {
                 _ = await store.importPhotos(items, to: chatID)
                 photoItems = []; importing = false
@@ -291,9 +293,6 @@ private struct ChatComposer: View {
             let value = saved ?? ""
             if store.draft(for: chatID) == value, input != value { input = value }
         }
-        .onChange(of: inputFocused) { _, focused in
-            if focused { withAnimation(panelAnimation) { showPlus = false } }
-        }
         .onDisappear { store.setDraft(input, for: chatID); store.flush() }
         .alert("提示", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("好", role: .cancel) { notice = nil }
@@ -302,8 +301,13 @@ private struct ChatComposer: View {
     private func send() {
         if store.sendText(input, to: chatID) { input = "" }
     }
+    private func attachmentButton(_ item: AttachmentAction) -> some View {
+        Button { attachmentAction(item) } label: {
+            Label(item.title, systemImage: item.symbol)
+        }
+    }
     private func attachmentAction(_ item: AttachmentAction) {
-        withAnimation(panelAnimation) { showPlus = false }
+        inputFocused = false
         switch item {
         case .photos: showPicker = true
         case .camera:
@@ -320,60 +324,7 @@ private enum AttachmentAction: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var title: String { ["照片", "拍摄", "视频通话", "位置", "红包", "转账", "礼物", "语音输入"][rawValue] }
     var symbol: String { ["photo.on.rectangle", "camera.fill", "video.fill", "location.fill",
-        "envelope.fill", "arrow.left.arrow.right", "gift.fill", "waveform"][rawValue] }
-    var color: Color {
-        let colors: [Color] = [.blue, .indigo, .green, .green, .red, .orange, .pink, .blue]
-        return colors[rawValue]
-    }
-}
-
-@available(iOS 26.0, *)
-private struct PlusPanel: View {
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    let onAction: (AttachmentAction) -> Void
-    var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
-            ForEach(AttachmentAction.allCases) { item in
-                Button { onAction(item) } label: {
-                    VStack(spacing: 8) {
-                        Image(systemName: item.symbol)
-                            .resizable().scaledToFit()
-                            .frame(width: 25, height: 25)
-                            .foregroundStyle(item.color)
-                        Text(item.title).font(.system(size: 11, weight: .medium))
-                            .lineLimit(1).minimumScaleFactor(0.85)
-                    }
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity).frame(height: 78)
-                    // One continuous glass surface, eight inset translucent tiles.
-                    // The label and icon share the tile instead of floating outside it.
-                    .background {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(reduceTransparency
-                                ? Color(uiColor: .secondarySystemGroupedBackground)
-                                : Color.primary.opacity(scheme == .dark ? 0.14 : 0.065))
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(.white.opacity(scheme == .dark ? 0.10 : 0.3), lineWidth: 0.5)
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                }
-                .buttonStyle(AttachmentButtonStyle())
-            }
-        }
-        .padding(12)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-    }
-}
-
-private struct AttachmentButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.scaleEffect(configuration.isPressed ? 0.91 : 1)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .animation(.smooth(duration: 0.18), value: configuration.isPressed)
-    }
+        "wallet.bifold.fill", "arrow.left.arrow.right", "gift.fill", "mic.fill"][rawValue] }
 }
 
 @available(iOS 26.0, *)

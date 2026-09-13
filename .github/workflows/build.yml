@@ -33,11 +33,11 @@ jobs:
           echo "iPhoneOS SDK: $SDK_VERSION"
           [[ "$SDK_VERSION" == 26.* ]]
 
-      - name: Verify local history migration and spring motion
+      - name: Verify saved history and photo layout
         shell: bash
         run: |
           set -euo pipefail
-          xcrun swiftc -swift-version 5 -parse-as-library LocalData.swift DemoSeed.swift StackSpring.swift Tests/LocalDataTests.swift Tests/MigrationAndMotionTests.swift -o "$RUNNER_TEMP/wechat-local-data-tests"
+          xcrun swiftc -swift-version 5 -parse-as-library LocalData.swift DemoSeed.swift PhotoLayoutMetrics.swift Tests/LocalDataTests.swift Tests/MigrationTests.swift Tests/PhotoLayoutTests.swift -o "$RUNNER_TEMP/wechat-local-data-tests"
           "$RUNNER_TEMP/wechat-local-data-tests"
 
       - name: Install build dependencies
