@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 // Geometry only. SwiftUI Layout owns interpolation; no per-frame simulation.
