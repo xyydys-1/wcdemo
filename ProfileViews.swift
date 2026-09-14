@@ -8,6 +8,8 @@ struct ProfileEditor: View {
     @EnvironmentObject private var store: DemoStore
     @Environment(\.dismiss) private var dismiss
     let profileID: String
+    var creating = false
+    var onSaved: ((String) -> Void)? = nil
     @State private var name = ""
     @State private var avatarKey: String?
     @State private var photoItem: PhotosPickerItem?
@@ -16,7 +18,7 @@ struct ProfileEditor: View {
     @State private var importID = UUID()
     @State private var problem: String?
     private var isGroup: Bool { store.chats.first { $0.id == profileID }?.isGroup ?? false }
-    private var title: String { isGroup ? "群资料" : (profileID == "me" ? "我的资料" : "头像与备注") }
+    private var title: String { creating ? "添加朋友" : (isGroup ? "群资料" : (profileID == "me" ? "我的资料" : "头像与备注")) }
 
     var body: some View {
         Form {
@@ -35,8 +37,9 @@ struct ProfileEditor: View {
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 18)
                 if avatarKey != nil {
-                    Button("使用默认头像", role: .destructive) { avatarKey = nil; photoItem = nil }
-                        .disabled(importing)
+                    Button(role: .destructive) { avatarKey = nil; photoItem = nil } label: {
+                        ArtworkLabel(title: "使用默认头像", artwork: "profile", titleColor: .red)
+                    }.disabled(importing)
                 }
             }
             Section {
@@ -57,7 +60,10 @@ struct ProfileEditor: View {
             ToolbarItem(placement: .topBarLeading) { Button("取消") { importID = UUID(); dismiss() } }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("完成") {
-                    if store.saveProfile(id: profileID, name: name, avatarKey: avatarKey) { dismiss() }
+                    if store.saveProfile(id: profileID, name: name, avatarKey: avatarKey) {
+                        onSaved?(profileID)
+                        dismiss()
+                    }
                     else { problem = store.errorMessage ?? "暂时无法保存，请重试。" }
                 }
                 .fontWeight(.semibold)
@@ -66,7 +72,9 @@ struct ProfileEditor: View {
         }
         .onAppear {
             guard !loaded else { return }
-            name = store.profile(profileID).name; avatarKey = store.profile(profileID).avatarKey; loaded = true
+            name = creating ? "" : store.profile(profileID).name
+            avatarKey = creating ? nil : store.profile(profileID).avatarKey
+            loaded = true
         }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -88,11 +96,20 @@ struct ProfileEditor: View {
             if let key = avatarKey, let image = store.media.image(key, maxPixel: 256) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                let person = store.profile(profileID)
-                DemoAvatar(symbol: person.symbol, color: person.color, size: 100)
+                StoredPhoto(source: DemoArtwork.profile(profileID), maxPixel: 384)
             }
         }
         .frame(width: 100, height: 100)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .photoSurface(cornerRadius: 24)
+    }
+}
+
+@available(iOS 26.0, *)
+struct NewContactView: View {
+    var onSaved: ((String) -> Void)? = nil
+    @State private var profileID = "contact-" + UUID().uuidString
+
+    var body: some View {
+        ProfileEditor(profileID: profileID, creating: true, onSaved: onSaved)
     }
 }

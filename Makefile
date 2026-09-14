@@ -12,10 +12,13 @@ WeChat26Demo_FILES := \
 	AppDelegate.m \
 	SceneDelegate.m \
 	LocalData.swift \
+	DirectoryData.swift \
 	DemoSeed.swift \
 	Models.swift \
 	MediaViews.swift \
+	ImageStyling.swift \
 	PhotoLayoutMetrics.swift \
+	PhotoPanGesture.swift \
 	NativePhotoStack.swift \
 	ProfileViews.swift \
 	RootViews.swift \

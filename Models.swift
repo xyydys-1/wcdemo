@@ -17,6 +17,9 @@ final class DemoStore: ObservableObject {
     var messages: [String: [DemoMessage]] { state.messages }
     var pinned: Set<String> { state.pinned }
     var muted: Set<String> { state.muted }
+    var chatListDisplayMode: ChatListDisplayMode { state.chatListDisplayMode ?? .standard }
+    var pinnedCollapsed: Bool { state.pinnedCollapsed ?? false }
+    var compactAttachmentMenu: Bool { state.compactAttachmentMenu ?? false }
 
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -27,7 +30,9 @@ final class DemoStore: ObservableObject {
             if let saved = try archiveFile.load() {
                 state = saved.archive
                 var migrated = saved.archive
-                if DemoHistoryMigration.apply(to: &migrated) {
+                let historyChanged = DemoHistoryMigration.apply(to: &migrated)
+                let directoryChanged = DemoDirectory.upgrade(&migrated)
+                if historyChanged || directoryChanged {
                     try archiveFile.save(migrated)
                     state = migrated
                 }
@@ -165,6 +170,21 @@ final class DemoStore: ObservableObject {
             }
         }
     }
+    func setChatListDisplayMode(_ mode: ChatListDisplayMode) { change { $0.chatListDisplayMode = mode } }
+    func setPinnedCollapsed(_ collapsed: Bool) { change { $0.pinnedCollapsed = collapsed } }
+    func setCompactAttachmentMenu(_ compact: Bool) { change { $0.compactAttachmentMenu = compact } }
+    @discardableResult
+    func addGroupMembers(_ ids: [String], to groupID: String) -> Bool {
+        guard state.chats.contains(where: { $0.id == groupID && $0.isGroup }) else { return false }
+        return change { next in _ = DemoDirectory.addMembers(ids, to: groupID, in: &next) }
+    }
+    func removeGroupMember(_ id: String, from groupID: String) {
+        guard id != "me" else { return }
+        change { next in
+            guard let index = next.chats.firstIndex(where: { $0.id == groupID && $0.isGroup }) else { return }
+            next.chats[index].memberIDs.removeAll { $0 == id }
+        }
+    }
     func setPinned(_ value: Bool, for id: String) {
         change { if value { $0.pinned.insert(id) } else { $0.pinned.remove(id) } }
     }
@@ -250,19 +270,6 @@ extension DemoTint {
 extension DemoContact { var color: Color { tint.color } }
 extension DemoChat { var avatarColor: Color { avatarTint.color } }
 
-struct DemoAvatar: View {
-    var symbol: String
-    var color: Color
-    var size: CGFloat = 48
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(color.gradient)
-            Image(systemName: symbol).font(.system(size: size * 0.42, weight: .semibold))
-                .frame(width: size, height: size, alignment: .center).foregroundStyle(.white)
-        }.frame(width: size, height: size)
-    }
-}
-
 struct ProfileAvatar: View {
     @EnvironmentObject private var store: DemoStore
     let id: String
@@ -274,25 +281,30 @@ struct ProfileAvatar: View {
                 Image(uiImage: image).resizable().scaledToFill()
             } else if let group = store.chats.first(where: { $0.id == id && $0.isGroup }), !group.memberIDs.isEmpty {
                 groupAvatar(group)
-            } else { DemoAvatar(symbol: person.symbol, color: person.color, size: size) }
+            } else {
+                StoredPhoto(source: DemoArtwork.profile(id), maxPixel: 256)
+            }
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+        .photoSurface(cornerRadius: size * 0.24)
         .accessibilityLabel(person.name + "的头像")
     }
     private func groupAvatar(_ chat: DemoChat) -> some View {
-        let ids = Array(chat.memberIDs.prefix(4))
-        let side = (size - 7) / 2
-        return LazyVGrid(columns: [GridItem(.fixed(side), spacing: 2), GridItem(.fixed(side), spacing: 2)], spacing: 2) {
+        let ids = Array(chat.memberIDs.prefix(9))
+        let columns = ids.count > 4 ? 3 : 2
+        let inset = max(2, size * 0.055)
+        let gap = max(1.5, size * 0.035)
+        let side = (size - inset * 2 - CGFloat(columns - 1) * gap) / CGFloat(columns)
+        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(side), spacing: gap), count: columns), spacing: gap) {
             ForEach(ids, id: \.self) { member in
                 let person = store.profile(member)
                 Group {
                     if let key = person.avatarKey, let image = store.media.image(key, maxPixel: 128) {
                         Image(uiImage: image).resizable().scaledToFill()
-                    } else { DemoAvatar(symbol: person.symbol, color: person.color, size: side) }
+                    } else { StoredPhoto(source: DemoArtwork.profile(member), maxPixel: 128) }
                 }
                 .frame(width: side, height: side)
-                .clipShape(RoundedRectangle(cornerRadius: side * 0.24, style: .continuous))
+                .photoSurface(cornerRadius: side * 0.24)
             }
         }
         .frame(width: size, height: size).background(Color(uiColor: .tertiarySystemFill))

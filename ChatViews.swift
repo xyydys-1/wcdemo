@@ -130,7 +130,7 @@ private struct MessageRow: View {
                     let ratio = max(0.05, store.media.aspect(key))
                     let width = min(photoWidth - 10, 224 * ratio)
                     StoredPhoto(source: key).frame(width: width, height: width / ratio)
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .photoSurface(cornerRadius: 13)
                         .onTapGesture { preview = PhotoPresentation(keys: [key]) }
                 } else { textBubble("图片暂时无法读取") }
             }
@@ -192,6 +192,9 @@ private struct ChatComposer: View {
     @State private var importing = false
     @State private var showCamera = false
     @State private var notice: String?
+    @State private var showAttachments = false
+    @State private var pendingAttachment: AttachmentAction?
+    @Namespace private var attachmentTransition
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -225,35 +228,7 @@ private struct ChatComposer: View {
                     .frame(height: 50)
                     .glassEffect(.regular.interactive(), in: Capsule())
 
-                    // Menu owns presentation, dismissal, glass thickness and morphing.
-                    // ControlGroup adapts the eight actions to the native menu layout.
-                    Menu {
-                        ControlGroup {
-                            attachmentButton(.photos)
-                            attachmentButton(.camera)
-                            attachmentButton(.video)
-                            attachmentButton(.location)
-                        }
-                        ControlGroup {
-                            attachmentButton(.envelope)
-                            attachmentButton(.transfer)
-                            attachmentButton(.gift)
-                            attachmentButton(.dictation)
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 21, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 50, height: 50)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: Circle())
-                    .menuOrder(.fixed)
-                    .labelStyle(.titleAndIcon)
-                    .tint(.primary)
-                    .accessibilityLabel("添加附件")
-                    .disabled(importing)
+                    attachmentControl
                 }
             }
         }
@@ -265,6 +240,18 @@ private struct ChatComposer: View {
         }
         .photosPicker(isPresented: $showPicker, selection: $photoItems, maxSelectionCount: 30,
             selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .compatible)
+        .sheet(isPresented: $showAttachments, onDismiss: finishAttachmentPresentation) {
+            AttachmentPanel { item in
+                pendingAttachment = item
+                showAttachments = false
+            }
+            // iOS 26 supplies the inset Liquid Glass sheet. Do not replace its
+            // presentation background with a material or an extra glass layer.
+            .presentationDetents([.height(296)])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(36)
+            .navigationTransition(.zoom(sourceID: "chat.attachments", in: attachmentTransition))
+        }
         .fullScreenCover(isPresented: $showCamera) {
             CameraCaptureView { image in
                 showCamera = false
@@ -301,6 +288,55 @@ private struct ChatComposer: View {
     private func send() {
         if store.sendText(input, to: chatID) { input = "" }
     }
+    private var plusLabel: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 21, weight: .medium))
+            .foregroundStyle(.primary)
+            .frame(width: 50, height: 50)
+            .contentShape(Circle())
+    }
+    @ViewBuilder private var attachmentControl: some View {
+        if store.compactAttachmentMenu {
+            Menu {
+                ControlGroup {
+                    attachmentButton(.photos)
+                    attachmentButton(.camera)
+                    attachmentButton(.video)
+                    attachmentButton(.location)
+                }
+                ControlGroup {
+                    attachmentButton(.envelope)
+                    attachmentButton(.transfer)
+                    attachmentButton(.gift)
+                    attachmentButton(.dictation)
+                }
+            } label: { plusLabel }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Circle())
+            .menuOrder(.fixed)
+            .labelStyle(.titleAndIcon)
+            .tint(.primary)
+            .accessibilityLabel("添加附件")
+            .disabled(importing)
+        } else {
+            Button {
+                inputFocused = false
+                pendingAttachment = nil
+                showAttachments = true
+            } label: { plusLabel }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Circle())
+            .matchedTransitionSource(id: "chat.attachments", in: attachmentTransition)
+            .accessibilityLabel("添加附件")
+            .disabled(importing)
+        }
+    }
+    private func finishAttachmentPresentation() {
+        guard let item = pendingAttachment else { return }
+        pendingAttachment = nil
+        // Present the picker/camera only after the panel has actually dismissed.
+        attachmentAction(item)
+    }
     private func attachmentButton(_ item: AttachmentAction) -> some View {
         Button { attachmentAction(item) } label: {
             Label(item.title, systemImage: item.symbol)
@@ -328,6 +364,56 @@ private enum AttachmentAction: Int, CaseIterable, Identifiable {
 }
 
 @available(iOS 26.0, *)
+private struct AttachmentPanel: View {
+    let select: (AttachmentAction) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 22) {
+            ForEach(AttachmentAction.allCases) { item in
+                VStack(spacing: 9) {
+                    Button { select(item) } label: {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(AttachmentTileStyle())
+                    .accessibilityLabel(item.title)
+                    Text(item.title).font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .padding(.horizontal, 26)
+        .padding(.vertical, 28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// The outer surface is the system's Liquid Glass sheet. Its content tiles use
+// a native frosted material; Button owns activation, cancellation and scrolling.
+// The only custom press treatment is the small SwiftUI spring enlargement.
+private struct AttachmentTileStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 19, style: .continuous)
+        return configuration.label
+            .frame(maxWidth: .infinity)
+            .frame(height: 66)
+            .background {
+                shape.fill(.ultraThinMaterial)
+                    .overlay { shape.fill(Color.gray.opacity(configuration.isPressed ? 0.20 : 0.12)) }
+            }
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? (reduceMotion ? 1.02 : 1.075) : 1)
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(duration: 0.25, bounce: 0.24),
+                       value: configuration.isPressed)
+    }
+}
+
+@available(iOS 26.0, *)
 struct ChatDetailView: View {
     @EnvironmentObject private var store: DemoStore
     @Environment(\.dismiss) private var dismiss
@@ -337,6 +423,7 @@ struct ChatDetailView: View {
     @State private var showClear = false
     @State private var wallpaperProblem: String?
     @State private var editProfile: ProfileSelection?
+    @State private var showMembers = false
     private var chat: DemoChat { store.chat(chatID) }
 
     var body: some View {
@@ -356,45 +443,77 @@ struct ChatDetailView: View {
                 }.buttonStyle(.plain)
             }
             if chat.isGroup {
-                Section("群成员") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 16) {
+                Section("群成员（\(chat.memberIDs.count)）") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 20) {
                         ForEach(chat.memberIDs, id: \.self) { id in
                             Button { editProfile = ProfileSelection(id: id) } label: {
-                                VStack(spacing: 6) {
-                                    ProfileAvatar(id: id, size: 48)
-                                    Text(store.profile(id).name).font(.caption).foregroundStyle(.primary).lineLimit(1)
-                                }
+                                VStack(spacing: 8) {
+                                    ProfileAvatar(id: id, size: 58)
+                                    Text(store.profile(id).name).font(.system(size: 14))
+                                        .foregroundStyle(.primary).lineLimit(1)
+                                }.frame(maxWidth: .infinity)
                             }.buttonStyle(.plain)
+                            .contextMenu {
+                                Button("编辑头像和昵称", systemImage: "pencil") { editProfile = ProfileSelection(id: id) }
+                                if id != "me" {
+                                    Button("移出群聊", systemImage: "person.fill.xmark", role: .destructive) {
+                                        store.removeGroupMember(id, from: chatID)
+                                    }
+                                }
+                            }
                         }
-                    }.padding(.vertical, 8)
+                        Button { showMembers = true } label: {
+                            VStack(spacing: 8) {
+                                Image(systemName: "plus").font(.system(size: 25, weight: .light))
+                                    .foregroundStyle(.secondary).frame(width: 58, height: 58)
+                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                                    }
+                                Text("添加").font(.system(size: 14)).foregroundStyle(.secondary)
+                            }.frame(maxWidth: .infinity)
+                        }.buttonStyle(.plain).accessibilityLabel("添加群成员")
+                    }.padding(.vertical, 10)
                 }
             }
             Section {
-                Toggle("消息免打扰", isOn: Binding(get: { store.muted.contains(chatID) }, set: { store.setMuted($0, for: chatID) }))
-                Toggle("置顶聊天", isOn: Binding(get: { store.pinned.contains(chatID) }, set: { store.setPinned($0, for: chatID) }))
-                Toggle("提醒", isOn: Binding(get: { store.state.reminders.contains(chatID) }, set: { store.setReminder($0, for: chatID) }))
+                Toggle(isOn: Binding(get: { store.muted.contains(chatID) }, set: { store.setMuted($0, for: chatID) })) {
+                    ArtworkLabel(title: "消息免打扰", artwork: "mute")
+                }
+                Toggle(isOn: Binding(get: { store.pinned.contains(chatID) }, set: { store.setPinned($0, for: chatID) })) {
+                    ArtworkLabel(title: "置顶聊天", artwork: "pin")
+                }
+                Toggle(isOn: Binding(get: { store.state.reminders.contains(chatID) }, set: { store.setReminder($0, for: chatID) })) {
+                    ArtworkLabel(title: "提醒", artwork: "bell")
+                }
             }
             Section {
                 PhotosPicker(selection: $wallpaperItem, matching: .images, preferredItemEncoding: .compatible) {
                     HStack {
-                        Text("设置当前聊天背景").foregroundStyle(Color.wxGreen)
+                        ArtworkLabel(title: "设置当前聊天背景", artwork: "photo")
                         Spacer()
-                        if importing { ProgressView() } else { Image(systemName: "photo").foregroundStyle(.secondary) }
+                        if importing { ProgressView() }
                     }
                 }.disabled(importing)
                 if store.state.wallpapers[chatID] != nil {
-                    Button("恢复默认聊天背景") { store.setWallpaper(nil, for: chatID); wallpaperItem = nil }
+                    Button { store.setWallpaper(nil, for: chatID); wallpaperItem = nil } label: {
+                        ArtworkLabel(title: "恢复默认聊天背景", artwork: "photo")
+                    }
                 }
                 if let wallpaperProblem { Text(wallpaperProblem).font(.footnote).foregroundStyle(.red) }
             }
             Section {
-                Button("清空聊天记录", role: .destructive) { showClear = true }
+                Button(role: .destructive) { showClear = true } label: {
+                    ArtworkLabel(title: "清空聊天记录", artwork: "trash", titleColor: .red)
+                }
             } footer: { Text("文字、图片、资料和设置均保存在本机。") }
         }
         .navigationTitle(chat.isGroup ? "群聊详情" : "聊天详情")
         .navigationBarTitleDisplayMode(.inline).toolbar(.hidden, for: .tabBar)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
         .sheet(item: $editProfile) { selection in NavigationStack { ProfileEditor(profileID: selection.id) } }
+        .sheet(isPresented: $showMembers) { NavigationStack { CreateGroupView(groupID: chatID) } }
         .alert("清空聊天记录？", isPresented: $showClear) {
             Button("清空", role: .destructive) { store.clearMessages(chatID) }
             Button("取消", role: .cancel) {}

@@ -79,6 +79,7 @@ enum DemoSeed {
         var archive = DemoArchive()
         archive.demoContentRevision = DemoHistoryMigration.currentRevision
         archive.chats = chats; archive.contacts = contacts; archive.messages = messages
+        DemoDirectory.upgrade(&archive)
         return archive
     }
 }
