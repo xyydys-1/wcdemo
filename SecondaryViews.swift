@@ -241,7 +241,7 @@ struct AddFriendView: View {
 
     var body: some View {
         Form {
-            Section("添加好友") {
+            Section {
                 TextField("账号/手机号", text: $keyword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -252,6 +252,8 @@ struct AddFriendView: View {
                     Label("添加到通讯录", systemImage: "person.badge.plus")
                 }
                 .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } header: {
+                Text("添加好友")
             } footer: {
                 Text("演示版会把新增好友写入本机存档；重新打开应用后仍会保留，也可以继续修改头像和昵称。")
             }

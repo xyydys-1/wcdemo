@@ -1,6 +1,6 @@
 # WeChat26Demo 0.3.3 — 首页模式、群成员与照片叠牌细调
 
-基于用户提供的 0.3.2 compilefix2 直接修改，最低 iOS 26.0、arm64，Bundle ID 仍为 `com.xyy.wechat26demo`。版本号更新为 0.3.3，构建号 8；覆盖安装继续读取原有本地数据。
+基于用户提供的 0.3.2 compilefix2 直接修改，最低 iOS 26.0、arm64，Bundle ID 仍为 `com.xyy.wechat26demo`。版本号更新为 0.3.3，构建号 9；覆盖安装继续读取原有本地数据。
 
 ## 0.3.3 改动
 
