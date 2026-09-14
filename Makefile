@@ -14,16 +14,15 @@ WeChat26Demo_FILES := \
 	LocalData.swift \
 	DemoSeed.swift \
 	Models.swift \
-	ImageStyling.swift \
-	PhotoGestureIntent.swift \
-	PhotoPanGesture.swift \
 	MediaViews.swift \
+	PhotoLayoutMetrics.swift \
+	NativePhotoStack.swift \
 	ProfileViews.swift \
 	RootViews.swift \
 	ChatViews.swift \
 	SecondaryViews.swift
 
-WeChat26Demo_FRAMEWORKS := UIKit PhotosUI
+WeChat26Demo_FRAMEWORKS := UIKit SwiftUI PhotosUI ImageIO QuickLook
 WeChat26Demo_CFLAGS := -fobjc-arc
 WeChat26Demo_SWIFTFLAGS := -parse-as-library
 

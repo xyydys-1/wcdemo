@@ -1,10 +1,91 @@
 import Foundation
-import UIKit
+
+// Foundation-only models: the same archive is exercised by Tests/LocalDataTests.swift.
+enum DemoTint: String, Codable {
+    case pink, blue, indigo, teal, orange, purple, cyan, green, red, gray
+}
+
+struct DemoContact: Identifiable, Codable {
+    let id: String
+    var name: String
+    var symbol: String
+    var tint: DemoTint
+    var subtitle: String
+    var avatarKey: String?
+
+    init(id: String, name: String, symbol: String, color: DemoTint,
+         subtitle: String = "", avatarKey: String? = nil) {
+        self.id = id; self.name = name; self.symbol = symbol; self.tint = color
+        self.subtitle = subtitle; self.avatarKey = avatarKey
+    }
+}
+
+enum DemoMessageKind: Codable {
+    case text(String)
+    case photo(String)
+    case photoStack([String])
+    case time(String)
+
+    var summary: String {
+        switch self {
+        case .text(let text): return text
+        case .photo: return "[图片]"
+        case .photoStack(let images): return "[\(images.count)张图片]"
+        case .time: return ""
+        }
+    }
+
+    var photoKeys: [String] {
+        switch self {
+        case .photo(let key): return [key]
+        case .photoStack(let keys): return keys
+        default: return []
+        }
+    }
+}
+
+struct DemoMessage: Identifiable, Codable {
+    let id: UUID
+    var senderID: String?
+    var incoming: Bool
+    var kind: DemoMessageKind
+    var createdAt: Date
+
+    init(id: UUID = UUID(), senderID: String?, incoming: Bool,
+         kind: DemoMessageKind, createdAt: Date = Date()) {
+        self.id = id; self.senderID = senderID; self.incoming = incoming
+        self.kind = kind; self.createdAt = createdAt
+    }
+}
+
+struct DemoChat: Identifiable, Codable {
+    let id: String
+    var title: String
+    var subtitle: String
+    var time: String
+    var unread: Int
+    var avatarSymbol: String
+    var avatarTint: DemoTint
+    var isGroup: Bool
+    var avatarKey: String?
+    var memberIDs: [String]
+
+    init(id: String, title: String, subtitle: String, time: String, unread: Int,
+         avatarSymbol: String, avatarColor: DemoTint, isGroup: Bool = false,
+         avatarKey: String? = nil, memberIDs: [String] = []) {
+        self.id = id; self.title = title; self.subtitle = subtitle; self.time = time
+        self.unread = unread; self.avatarSymbol = avatarSymbol; self.avatarTint = avatarColor
+        self.isGroup = isGroup; self.avatarKey = avatarKey; self.memberIDs = memberIDs
+    }
+}
 
 struct DemoArchive: Codable {
-    var schemaVersion: Int = 1
+    var schemaVersion = 1
+    // Optional for decoding 0.3.0 archives without resetting any user data.
+    var demoContentRevision: Int?
     var chats: [DemoChat] = []
     var contacts: [DemoContact] = []
+    var me = DemoContact(id: "me", name: "漂泊者", symbol: "person.fill", color: .blue)
     var messages: [String: [DemoMessage]] = [:]
     var pinned: Set<String> = []
     var muted: Set<String> = []
@@ -12,129 +93,64 @@ struct DemoArchive: Codable {
     var wallpapers: [String: String] = [:]
     var drafts: [String: String] = [:]
     var hiddenChats: Set<String> = []
-    var chatListDisplayMode: ChatListDisplayMode = .standard
-    var pinnedCollapsed: Bool = false
-    var directoryRevision: Int = 1
-
-    private enum CodingKeys: String, CodingKey { case schemaVersion, chats, contacts, messages, pinned, muted, reminders, wallpapers, drafts, hiddenChats, chatListDisplayMode, pinnedCollapsed, directoryRevision }
-    init(schemaVersion: Int = 1, chats: [DemoChat] = [], contacts: [DemoContact] = [], messages: [String:[DemoMessage]] = [:], pinned: Set<String> = [], muted: Set<String> = [], reminders: Set<String> = [], wallpapers: [String:String] = [:], drafts: [String:String] = [:], hiddenChats: Set<String> = [], chatListDisplayMode: ChatListDisplayMode = .standard, pinnedCollapsed: Bool = false, directoryRevision: Int = 1) {
-        self.schemaVersion=schemaVersion; self.chats=chats; self.contacts=contacts; self.messages=messages; self.pinned=pinned; self.muted=muted; self.reminders=reminders; self.wallpapers=wallpapers; self.drafts=drafts; self.hiddenChats=hiddenChats; self.chatListDisplayMode=chatListDisplayMode; self.pinnedCollapsed=pinnedCollapsed; self.directoryRevision=directoryRevision
-    }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        chats = try c.decodeIfPresent([DemoChat].self, forKey: .chats) ?? []
-        contacts = try c.decodeIfPresent([DemoContact].self, forKey: .contacts) ?? []
-        messages = try c.decodeIfPresent([String:[DemoMessage]].self, forKey: .messages) ?? [:]
-        pinned = try c.decodeIfPresent(Set<String>.self, forKey: .pinned) ?? []
-        muted = try c.decodeIfPresent(Set<String>.self, forKey: .muted) ?? []
-        reminders = try c.decodeIfPresent(Set<String>.self, forKey: .reminders) ?? []
-        wallpapers = try c.decodeIfPresent([String:String].self, forKey: .wallpapers) ?? [:]
-        drafts = try c.decodeIfPresent([String:String].self, forKey: .drafts) ?? [:]
-        hiddenChats = try c.decodeIfPresent(Set<String>.self, forKey: .hiddenChats) ?? []
-        chatListDisplayMode = try c.decodeIfPresent(ChatListDisplayMode.self, forKey: .chatListDisplayMode) ?? .standard
-        pinnedCollapsed = try c.decodeIfPresent(Bool.self, forKey: .pinnedCollapsed) ?? false
-        directoryRevision = try c.decodeIfPresent(Int.self, forKey: .directoryRevision) ?? 1
-    }
 }
 
-
-enum LocalStoreError: LocalizedError {
-    case mediaWriteFailed
-    case archiveWriteFailed
+enum LocalDataError: LocalizedError {
+    case unreadableArchive, unsupportedVersion, invalidImage, invalidKey
     var errorDescription: String? {
         switch self {
-        case .mediaWriteFailed: return "图片保存失败"
-        case .archiveWriteFailed: return "聊天记录保存失败"
+        case .unreadableArchive: return "本地记录暂时无法读取，原文件已保留，没有重新初始化。"
+        case .unsupportedVersion: return "这些记录由更新版本保存，请使用相同或更高版本打开。"
+        case .invalidImage: return "无法读取这张照片，请重新选择。"
+        case .invalidKey: return "找不到对应的本地图片。"
         }
     }
 }
 
-final class DemoMediaStore {
-    private let root: URL
-    private let fm = FileManager.default
-    private let cache = NSCache<NSString, UIImage>()
+final class LocalArchiveFile {
+    let directory: URL
+    var archiveURL: URL { directory.appendingPathComponent("notes-v1.json") }
+    var backupURL: URL { directory.appendingPathComponent("notes-v1.backup.json") }
 
-    init(base: URL? = nil) {
-        let support = base ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        root = support.appendingPathComponent("WeChat26Demo/Media", isDirectory: true)
-        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-    }
+    init(directory: URL) { self.directory = directory }
 
-    func image(_ key: String, maxPixel: CGFloat? = nil) -> UIImage? {
-        if key.hasPrefix("asset:") {
-            return UIImage(named: String(key.dropFirst(6)))
-        }
-        let ck = key as NSString
-        if let cached = cache.object(forKey: ck) { return cached }
-        let url = root.appendingPathComponent(key)
-        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
-        cache.setObject(image, forKey: ck)
-        return image
-    }
-
-    func save(_ image: UIImage, prefix: String, maxPixel: CGFloat) throws -> String {
-        let normalized = image.normalized(maxPixel: maxPixel)
-        guard let data = normalized.jpegData(compressionQuality: 0.91) else { throw LocalStoreError.mediaWriteFailed }
-        let name = "\(prefix)-\(UUID().uuidString).jpg"
-        let url = root.appendingPathComponent(name)
-        do { try data.write(to: url, options: .atomic) }
-        catch { throw LocalStoreError.mediaWriteFailed }
-        cache.setObject(normalized, forKey: name as NSString)
-        return name
-    }
-
-    func aspect(_ key: String) -> CGFloat {
-        guard let image = image(key) else { return 1 }
-        return max(0.2, min(5, image.size.width / max(1, image.size.height)))
-    }
-}
-
-private extension UIImage {
-    func normalized(maxPixel: CGFloat) -> UIImage {
-        let w = size.width, h = size.height
-        let scale = min(1, maxPixel / max(w, h))
-        let target = CGSize(width: max(1, w * scale), height: max(1, h * scale))
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
-            draw(in: CGRect(origin: .zero, size: target))
-        }
-    }
-}
-
-final class DemoPersistence {
-    private let url: URL
-    private let backupURL: URL
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-
-    init(base: URL? = nil) {
+    // nil means first install only. Empty chats/messages are valid saved user data.
+    func load() throws -> (archive: DemoArchive, recovered: Bool)? {
         let fm = FileManager.default
-        let support = base ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let folder = support.appendingPathComponent("WeChat26Demo", isDirectory: true)
-        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        url = folder.appendingPathComponent("notes-v1.json")
-        backupURL = folder.appendingPathComponent("notes-v1.backup.json")
-        encoder.outputFormatting = [.sortedKeys]
-    }
-
-    func load() -> DemoArchive? {
-        for candidate in [url, backupURL] {
-            if let data = try? Data(contentsOf: candidate), let value = try? decoder.decode(DemoArchive.self, from: data) {
-                return value
-            }
+        let hasCurrent = fm.fileExists(atPath: archiveURL.path)
+        let hasBackup = fm.fileExists(atPath: backupURL.path)
+        guard hasCurrent || hasBackup else { return nil }
+        if hasCurrent, let data = try? Data(contentsOf: archiveURL) {
+            do { return (try decode(data), false) }
+            catch LocalDataError.unsupportedVersion { throw LocalDataError.unsupportedVersion }
+            catch { /* Try the last complete revision without touching either file. */ }
         }
-        return nil
+        if hasBackup, let data = try? Data(contentsOf: backupURL) {
+            do { return (try decode(data), true) }
+            catch LocalDataError.unsupportedVersion { throw LocalDataError.unsupportedVersion }
+            catch { }
+        }
+        throw LocalDataError.unreadableArchive
     }
 
     func save(_ archive: DemoArchive) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(archive)
-        if FileManager.default.fileExists(atPath: url.path) {
-            try? FileManager.default.removeItem(at: backupURL)
-            try? FileManager.default.copyItem(at: url, to: backupURL)
+        // Never promote a damaged current file into the recovery slot.
+        if let old = try? Data(contentsOf: archiveURL), (try? decode(old)) != nil {
+            try old.write(to: backupURL, options: .atomic)
         }
-        do { try data.write(to: url, options: .atomic) }
-        catch { throw LocalStoreError.archiveWriteFailed }
+        try data.write(to: archiveURL, options: .atomic)
+    }
+
+    private func decode(_ data: Data) throws -> DemoArchive {
+        struct VersionHeader: Decodable { let schemaVersion: Int }
+        let decoder = JSONDecoder()
+        let header = try decoder.decode(VersionHeader.self, from: data)
+        guard header.schemaVersion == 1 else { throw LocalDataError.unsupportedVersion }
+        return try decoder.decode(DemoArchive.self, from: data)
     }
 }

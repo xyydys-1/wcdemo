@@ -5,7 +5,6 @@ struct LocalDataTests {
     static func main() throws {
         try migrationTests()
         try photoLayoutTests()
-        try directoryTests()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("WeChat26Tests-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let file = LocalArchiveFile(directory: root)
@@ -79,7 +78,7 @@ struct LocalDataTests {
             throw Failure("Write failures must be surfaced")
         } catch is Failure { throw Failure("Write failures must be surfaced") }
         catch { }
-        print("PASS: text-only examples, archive migrations, photo grid geometry, editable directory and group membership, display preferences, disk round-trip, avatars/names/settings/drafts, photo order, stable IDs, isolated chats, empty-state retention, recovery, future-version guard, write failure")
+        print("PASS: text-only examples, 0.3.0 migration, photo grid geometry, disk round-trip, avatars/names/settings/drafts, photo order, stable IDs, isolated chats, empty-state retention, recovery, future-version guard, write failure")
     }
 
     struct Failure: Error { let description: String; init(_ description: String) { self.description = description } }

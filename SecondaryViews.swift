@@ -3,32 +3,78 @@ import SwiftUI
 @available(iOS 26.0, *)
 struct ContactsView: View {
     @EnvironmentObject private var store: DemoStore
-    @State private var showNew = false
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button { showNew = true } label: { ContactActionLabel(title: "新的朋友", symbol: "person.badge.plus") }
-                    NavigationLink { CreateGroupView() } label: { ContactActionLabel(title: "群聊", symbol: "person.3.fill") }
+                    NavigationLink { AddFriendView() } label: {
+                        ContactActionLabel(title: "新的朋友", symbol: "person.badge.plus")
+                    }
+                    NavigationLink {
+                        List(store.chats.filter(\.isGroup)) { chat in
+                            NavigationLink { ChatView(chatID: chat.id) } label: {
+                                HStack(spacing: 12) { ProfileAvatar(id: chat.id, size: 42); Text(chat.title) }
+                            }
+                        }.navigationTitle("群聊").toolbar(.hidden, for: .tabBar)
+                    } label: { ContactActionLabel(title: "群聊", symbol: "person.3.fill") }
                     ContactActionLabel(title: "标签", symbol: "tag.fill")
                     ContactActionLabel(title: "服务号", symbol: "bag.fill")
                 }
-                Section("联系人") { ForEach(store.contacts) { contact in contactLink(contact) } }
+
+                Section("我的企业") {
+                    Label("黑海岸", systemImage: "water.waves")
+                    Label("莫塔里", systemImage: "seal.fill")
+                }
+
+                Section("联系人") {
+                    ForEach(store.contacts.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { contact in
+                        contactLink(contact)
+                    }
+                }
             }
-            .listStyle(.insetGrouped).navigationTitle("通讯录")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showNew = true } label: { Image(systemName: "person.badge.plus").font(.system(size: 21, weight: .regular)).frame(width: 30, height: 30) } } }
-            .sheet(isPresented: $showNew) { NavigationStack { NewContactView() } }
+            .listStyle(.insetGrouped)
+            .navigationTitle("通讯录")
+            .toolbar {
+                ToolbarItem(id: "contacts.add", placement: .topBarTrailing) {
+                    NavigationLink { AddFriendView() } label: {
+                        Image(systemName: "person.badge.plus")
+                            .resizable().scaledToFit()
+                            .frame(width: 21, height: 21)
+                            .offset(x: -0.5, y: -0.5)
+                            .frame(width: 24, height: 24)
+                    }
+                    .accessibilityLabel("添加朋友")
+                }
+            }
         }
     }
+
     private func contactLink(_ contact: DemoContact) -> some View {
-        NavigationLink { ContactDetailView(contactID: contact.id) } label: { HStack(spacing: 12) { ProfileAvatar(id: contact.id, size: 42); Text(contact.name) } }
+        NavigationLink {
+            ContactDetailView(contactID: contact.id)
+        } label: {
+            HStack(spacing: 12) {
+                ProfileAvatar(id: contact.id, size: 42)
+                Text(contact.name)
+            }
+        }
     }
 }
 
-@available(iOS 26.0, *)
 private struct ContactActionLabel: View {
-    let title: String; let symbol: String
-    var body: some View { HStack(spacing: 12) { Image(systemName: symbol).foregroundStyle(Color.wxGreen).frame(width: 28); Text(title).foregroundStyle(.primary) } }
+    let title: String
+    let symbol: String
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: symbol).resizable().scaledToFit()
+                .frame(width: 23, height: 23)
+                .frame(width: 28, height: 28)
+                .foregroundStyle(Color.wxGreen)
+        }
+    }
 }
 
 @available(iOS 26.0, *)
@@ -37,22 +83,62 @@ struct ContactDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let contactID: String
     @State private var showDelete = false
-    private var contact: DemoContact { store.contact(contactID) ?? DemoContact(id: contactID, name: "联系人", symbol: "person.fill", colorName: "gray") }
+    @State private var showProfile = false
+
+    private var contact: DemoContact {
+        store.contact(contactID) ?? DemoContact(id: contactID, name: "联系人", symbol: "person.fill", color: .gray)
+    }
+
     var body: some View {
         Form {
             Section {
-                NavigationLink { ProfileEditorView(target: .contact(contactID)) } label: {
-                    HStack(spacing: 16) { ProfileAvatar(id: contactID, size: 68); VStack(alignment: .leading, spacing: 5) { Text(contact.name).font(.title3.bold()); Text("微信号：demo_\(contact.id)").font(.subheadline).foregroundStyle(.secondary) } }
+                HStack(spacing: 16) {
+                    Button { showProfile = true } label: { ProfileAvatar(id: contact.id, size: 68) }.buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(contact.name).font(.title3.bold())
+                        Text(contact.id.hasPrefix("friend-") && !contact.subtitle.isEmpty
+                             ? "微信号：\(contact.subtitle)"
+                             : "微信号：demo_\(contact.id)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.vertical, 10)
             }
+
             Section {
-                NavigationLink { ChatView(chatID: store.ensureDirectChat(contactID)) } label: { Label("发消息", systemImage: "message.fill").foregroundStyle(Color.wxGreen) }
-                Label("音视频通话", systemImage: "video.fill").foregroundStyle(Color.wxGreen)
+                Button("修改头像和昵称 / 备注") { showProfile = true }
+                HStack { Text("朋友权限"); Spacer(); Text("聊天、朋友圈").foregroundStyle(.secondary) }
             }
-            Section { Button("删除联系人", role: .destructive) { showDelete = true } }
+
+            Section {
+                NavigationLink {
+                    ChatView(chatID: contactID)
+                } label: {
+                    Label("发消息", systemImage: "message.fill")
+                        .foregroundStyle(Color.wxGreen)
+                }
+                Label("音视频通话", systemImage: "video.fill")
+                    .foregroundStyle(Color.wxGreen)
+            }
+
+            Section {
+                Button("删除联系人", role: .destructive) { showDelete = true }
+            }
         }
-        .navigationTitle("详细资料").navigationBarTitleDisplayMode(.inline).toolbar(.hidden, for: .tabBar)
-        .alert("删除联系人？", isPresented: $showDelete) { Button("删除", role: .destructive) { store.deleteContact(contactID); dismiss() }; Button("取消", role: .cancel) { } }
+        .navigationTitle("详细资料")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .sheet(isPresented: $showProfile) { NavigationStack { ProfileEditor(profileID: contactID) } }
+        .alert("删除联系人？", isPresented: $showDelete) {
+            Button("删除", role: .destructive) {
+                store.deleteContact(contactID)
+                dismiss()
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("将从本机通讯录中移除这个联系人。已有的聊天笔记仍会保留。")
+        }
     }
 }
 
@@ -61,63 +147,169 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section { NavigationLink { PlaceholderView(title: "朋友圈") } label: { DiscoverRow("朋友圈", "camera.fill", .blue) } }
-                Section { DiscoverRow("视频号", "play.rectangle.fill", .orange); DiscoverRow("直播", "dot.radiowaves.left.and.right", .red) }
-                Section { DiscoverRow("扫一扫", "qrcode.viewfinder", .blue); DiscoverRow("摇一摇", "wave.3.right", .blue) }
-                Section { DiscoverRow("看一看", "eye.fill", .blue); DiscoverRow("搜一搜", "magnifyingglass", .blue) }
-                Section { DiscoverRow("附近", "location.fill", .blue); DiscoverRow("小程序", "circle.grid.2x2.fill", .purple) }
-            }.listStyle(.insetGrouped).navigationTitle("发现")
+                Section {
+                    NavigationLink { PlaceholderView(title: "朋友圈") } label: { DiscoverRow("朋友圈", "camera.fill", .blue) }
+                }
+                Section {
+                    NavigationLink { PlaceholderView(title: "视频号") } label: { DiscoverRow("视频号", "play.rectangle.fill", .orange) }
+                    NavigationLink { PlaceholderView(title: "直播") } label: { DiscoverRow("直播", "dot.radiowaves.left.and.right", .red) }
+                }
+                Section {
+                    DiscoverRow("扫一扫", "qrcode.viewfinder", .blue)
+                    DiscoverRow("摇一摇", "wave.3.right", .blue)
+                }
+                Section {
+                    DiscoverRow("看一看", "eye.fill", .blue)
+                    DiscoverRow("搜一搜", "magnifyingglass", .blue)
+                }
+                Section {
+                    DiscoverRow("附近", "location.fill", .blue)
+                    DiscoverRow("小程序", "circle.grid.2x2.fill", .purple)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("发现")
         }
     }
 }
 
 @available(iOS 26.0, *)
 private struct DiscoverRow: View {
-    let title:String, symbol:String, color:Color
-    init(_ title:String,_ symbol:String,_ color:Color){self.title=title;self.symbol=symbol;self.color=color}
-    var body: some View { Label { Text(title).foregroundStyle(.primary) } icon: { Image(systemName:symbol).foregroundStyle(color).frame(width:28) } }
-}
-
-@available(iOS 26.0, *)
-struct MeView: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    init(_ title: String, _ symbol: String, _ color: Color) {
+        self.title = title; self.symbol = symbol; self.color = color
+    }
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    NavigationLink { ProfileEditorView(target: .me) } label: {
-                        HStack(spacing:16){ ProfileAvatar(id:"me",size:72); VStack(alignment:.leading,spacing:6){ Text("个人资料").font(.title3.bold()); Text("修改头像和昵称").font(.subheadline).foregroundStyle(.secondary) }; Spacer(); Image(systemName:"qrcode").foregroundStyle(.secondary) }.padding(.vertical,10)
-                    }
-                }
-                Section { Label("服务",systemImage:"square.grid.2x2.fill") }
-                Section { Label("收藏",systemImage:"cube.box.fill"); Label("朋友圈",systemImage:"photo.on.rectangle.angled"); Label("卡包",systemImage:"creditcard.fill"); Label("表情",systemImage:"face.smiling.fill") }
-                Section { NavigationLink { DemoSettingsView() } label: { Label("设置",systemImage:"gearshape.fill") } }
-            }.listStyle(.insetGrouped).navigationTitle("我")
+        Label {
+            Text(title).foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: symbol).foregroundStyle(color)
         }
     }
 }
 
 @available(iOS 26.0, *)
-struct DemoSettingsView: View {
+struct MeView: View {
     @EnvironmentObject private var store: DemoStore
+    @State private var showProfile = false
     var body: some View {
-        Form {
-            Section("聊天列表") {
-                Picker("显示模式", selection: Binding(get:{store.chatListDisplayMode}, set:{store.setDisplayMode($0)})) { Text("默认").tag(ChatListDisplayMode.standard); Text("紧凑").tag(ChatListDisplayMode.compact) }
-                Toggle("折叠置顶聊天", isOn: Binding(get:{store.pinnedCollapsed}, set:{store.setPinnedCollapsed($0)}))
+        NavigationStack {
+            List {
+                Section {
+                    Button { showProfile = true } label: {
+                    HStack(spacing: 16) {
+                        ProfileAvatar(id: "me", size: 72)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(store.state.me.name).font(.title3.bold()).foregroundStyle(.primary)
+                            Text("微信号：Rover26").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "qrcode").foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 10)
+                    }.buttonStyle(.plain)
+                }
+
+                Section {
+                    Label("服务", systemImage: "square.grid.2x2.fill")
+                }
+                Section {
+                    Label("收藏", systemImage: "cube.box.fill")
+                    Label("朋友圈", systemImage: "photo.on.rectangle.angled")
+                    Label("卡包", systemImage: "creditcard.fill")
+                    Label("表情", systemImage: "face.smiling.fill")
+                }
+                Section {
+                    Label("设置", systemImage: "gearshape.fill")
+                }
             }
-            Section { Text("消息、图片、头像、备注和设置均保存到本机。").font(.footnote).foregroundStyle(.secondary) }
-        }.navigationTitle("设置")
+            .listStyle(.insetGrouped)
+            .navigationTitle("我")
+            .sheet(isPresented: $showProfile) { NavigationStack { ProfileEditor(profileID: "me") } }
+        }
     }
 }
 
 @available(iOS 26.0, *)
-struct AddFriendView: View { var body: some View { NewContactView() } }
+struct AddFriendView: View {
+    @EnvironmentObject private var store: DemoStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var keyword = ""
+    @State private var nickname = ""
+
+    var body: some View {
+        Form {
+            Section("添加好友") {
+                TextField("账号/手机号", text: $keyword)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("昵称（可选）", text: $nickname)
+                    .submitLabel(.done)
+                    .onSubmit(addFriend)
+                Button { addFriend() } label: {
+                    Label("添加到通讯录", systemImage: "person.badge.plus")
+                }
+                .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } footer: {
+                Text("演示版会把新增好友写入本机存档；重新打开应用后仍会保留，也可以继续修改头像和昵称。")
+            }
+            Section {
+                Label("扫一扫", systemImage: "qrcode.viewfinder")
+                Label("手机联系人", systemImage: "phone.fill")
+                Label("雷达", systemImage: "dot.radiowaves.left.and.right")
+                Label("面对面建群", systemImage: "person.3.fill")
+            }
+            Section {
+                Label("公众号", systemImage: "doc.text.fill")
+                Label("服务号", systemImage: "bag.fill")
+            }
+        }
+        .navigationTitle("添加朋友")
+        .toolbar(.hidden, for: .tabBar)
+    }
+
+    private func addFriend() {
+        if store.addFriend(account: keyword, name: nickname) != nil { dismiss() }
+    }
+}
 
 @available(iOS 26.0, *)
 struct PaymentView: View {
     var body: some View {
-        ZStack { Color.wxGreen.ignoresSafeArea(); VStack(spacing:22){ Text("收付款").font(.title2.bold()).foregroundStyle(.white); VStack(spacing:14){ Image(systemName:"barcode").resizable().scaledToFit().frame(height:82); Image(systemName:"qrcode").resizable().scaledToFit().frame(width:210,height:210); Text("向商家付款").font(.headline); Text("¥ 0.00").font(.largeTitle.bold()) }.padding(28).background(.white,in:RoundedRectangle(cornerRadius:28,style:.continuous)).foregroundStyle(.black); Spacer() }.padding(.top,28).padding(.horizontal,24) }
-        .navigationBarTitleDisplayMode(.inline).toolbarBackground(.hidden,for:.navigationBar).toolbar(.hidden,for:.tabBar)
+        ZStack {
+            Color.wxGreen.ignoresSafeArea()
+            VStack(spacing: 22) {
+                Text("收付款")
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+                VStack(spacing: 14) {
+                    Image(systemName: "barcode")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 82)
+                    Image(systemName: "qrcode")
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .frame(width: 210, height: 210)
+                    Text("向商家付款")
+                        .font(.headline)
+                    Text("¥ 0.00")
+                        .font(.largeTitle.bold())
+                }
+                .padding(28)
+                .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .foregroundStyle(.black)
+                Spacer()
+            }
+            .padding(.top, 28)
+            .padding(.horizontal, 24)
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -125,12 +317,45 @@ struct PaymentView: View {
 struct CreateGroupView: View {
     @EnvironmentObject private var store: DemoStore
     @Environment(\.dismiss) private var dismiss
-    @State private var selected:Set<String>=[]
+    @State private var selected: Set<String> = []
+    @State private var searchText = ""
+
     var body: some View {
-        List(store.contacts){ c in Button{ if selected.contains(c.id){selected.remove(c.id)}else{selected.insert(c.id)} }label:{ HStack{ProfileAvatar(id:c.id,size:42);Text(c.name).foregroundStyle(.primary);Spacer();Image(systemName:selected.contains(c.id) ? "checkmark.circle.fill":"circle").foregroundStyle(selected.contains(c.id) ? Color.wxGreen:Color.secondary)} } }
-        .navigationTitle("发起群聊").toolbar(.hidden,for:.tabBar).toolbar{ToolbarItem(placement:.topBarTrailing){Button("完成"){_=store.createGroup(memberIDs:Array(selected));dismiss()}.disabled(selected.isEmpty)}}
+        List {
+            ForEach(store.contacts.filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }) { contact in
+                Button {
+                    if selected.contains(contact.id) { selected.remove(contact.id) }
+                    else { selected.insert(contact.id) }
+                } label: {
+                    HStack(spacing: 12) {
+                        ProfileAvatar(id: contact.id, size: 42)
+                        Text(contact.name).foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: selected.contains(contact.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selected.contains(contact.id) ? Color.wxGreen : Color.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("发起群聊")
+        .toolbar(.hidden, for: .tabBar)
+        .searchable(text: $searchText, prompt: "搜索")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成") {
+                    if store.createGroup(memberIDs: Array(selected)) != nil { dismiss() }
+                }
+                .disabled(selected.isEmpty)
+            }
+        }
     }
 }
 
 @available(iOS 26.0, *)
-struct PlaceholderView: View { let title:String; var body: some View { ContentUnavailableView(title,systemImage:"sparkles",description:Text("演示占位页面")).navigationTitle(title) } }
+private struct PlaceholderView: View {
+    let title: String
+    var body: some View {
+        ContentUnavailableView(title, systemImage: "sparkles", description: Text("演示占位页面"))
+            .navigationTitle(title)
+    }
+}
