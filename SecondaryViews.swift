@@ -28,7 +28,7 @@ struct ContactsView: View {
 @available(iOS 26.0, *)
 private struct ContactActionLabel: View {
     let title: String; let symbol: String
-    var body: some View { HStack(spacing: 12) { Image(systemName: symbol).foregroundStyle(.wxGreen).frame(width: 28); Text(title).foregroundStyle(.primary) } }
+    var body: some View { HStack(spacing: 12) { Image(systemName: symbol).foregroundStyle(Color.wxGreen).frame(width: 28); Text(title).foregroundStyle(.primary) } }
 }
 
 @available(iOS 26.0, *)
@@ -46,8 +46,8 @@ struct ContactDetailView: View {
                 }
             }
             Section {
-                NavigationLink { ChatView(chatID: store.ensureDirectChat(contactID)) } label: { Label("发消息", systemImage: "message.fill").foregroundStyle(.wxGreen) }
-                Label("音视频通话", systemImage: "video.fill").foregroundStyle(.wxGreen)
+                NavigationLink { ChatView(chatID: store.ensureDirectChat(contactID)) } label: { Label("发消息", systemImage: "message.fill").foregroundStyle(Color.wxGreen) }
+                Label("音视频通话", systemImage: "video.fill").foregroundStyle(Color.wxGreen)
             }
             Section { Button("删除联系人", role: .destructive) { showDelete = true } }
         }
@@ -127,7 +127,7 @@ struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selected:Set<String>=[]
     var body: some View {
-        List(store.contacts){ c in Button{ if selected.contains(c.id){selected.remove(c.id)}else{selected.insert(c.id)} }label:{ HStack{ProfileAvatar(id:c.id,size:42);Text(c.name).foregroundStyle(.primary);Spacer();Image(systemName:selected.contains(c.id) ? "checkmark.circle.fill":"circle").foregroundStyle(selected.contains(c.id) ? Color.wxGreen:.secondary)} } }
+        List(store.contacts){ c in Button{ if selected.contains(c.id){selected.remove(c.id)}else{selected.insert(c.id)} }label:{ HStack{ProfileAvatar(id:c.id,size:42);Text(c.name).foregroundStyle(.primary);Spacer();Image(systemName:selected.contains(c.id) ? "checkmark.circle.fill":"circle").foregroundStyle(selected.contains(c.id) ? Color.wxGreen:Color.secondary)} } }
         .navigationTitle("发起群聊").toolbar(.hidden,for:.tabBar).toolbar{ToolbarItem(placement:.topBarTrailing){Button("完成"){_=store.createGroup(memberIDs:Array(selected));dismiss()}.disabled(selected.isEmpty)}}
     }
 }

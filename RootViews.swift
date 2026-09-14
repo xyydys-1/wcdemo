@@ -24,7 +24,7 @@ struct WeChatDemoRoot: View {
             Tab("我", systemImage: "person.fill", value: RootTab.me) { MeView() }
             Tab(value: RootTab.search, role: .search) { SearchHubView(query: $searchText) }
         }
-        .searchable(text: $searchText, prompt: "搜索").tabViewSearchActivation(.searchTabSelection).tabBarMinimizeBehavior(.onScrollDown).tint(.wxGreen).environmentObject(store)
+        .searchable(text: $searchText, prompt: "搜索").tabViewSearchActivation(.searchTabSelection).tabBarMinimizeBehavior(.onScrollDown).tint(Color.wxGreen).environmentObject(store)
     }
 }
 

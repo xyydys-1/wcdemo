@@ -2,6 +2,8 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+private let groupMemberColumns: [GridItem] = Array(repeating: GridItem(.flexible()), count: 4)
+
 @available(iOS 26.0, *)
 struct ChatView: View {
     @EnvironmentObject private var store: DemoStore
@@ -175,6 +177,42 @@ private struct ChatComposer: View {
 }
 
 @available(iOS 26.0, *)
+private struct GroupMemberCell: View {
+    let id: String
+    let name: String
+    let onLongPress: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ProfileAvatar(id: id, size: 48)
+            Text(name)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .onLongPressGesture(perform: onLongPress)
+    }
+}
+
+@available(iOS 26.0, *)
+private struct AddGroupMemberCell: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .light))
+                    .frame(width: 48, height: 48)
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text("添加").font(.caption)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+    }
+}
+
+@available(iOS 26.0, *)
 struct ChatDetailView: View {
     @EnvironmentObject private var store: DemoStore
     let chatID: String
@@ -194,19 +232,15 @@ struct ChatDetailView: View {
                     }
                 }
                 Section("群成员 \(chat.memberIDs.count)") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 16) {
+                    LazyVGrid(columns: groupMemberColumns, spacing: 16) {
                         ForEach(chat.memberIDs, id: \.self) { id in
-                            VStack(spacing: 6) { ProfileAvatar(id: id, size: 48); Text(store.profileName(id)).font(.caption).lineLimit(1) }
-                                .onLongPressGesture { if id != "me" { editingMember = id } }
-                        }
-                        Button { showAddMembers = true } label: {
-                            VStack(spacing: 6) {
-                                Image(systemName: "plus").font(.system(size: 22, weight: .light)).frame(width: 48, height: 48)
-                                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                Text("添加").font(.caption)
+                            GroupMemberCell(id: id, name: store.profileName(id)) {
+                                if id != "me" { editingMember = id }
                             }
-                        }.buttonStyle(.plain).foregroundStyle(.primary)
-                    }.padding(.vertical, 8)
+                        }
+                        AddGroupMemberCell { showAddMembers = true }
+                    }
+                    .padding(.vertical, 8)
                 }
             } else {
                 Section { NavigationLink { ProfileEditorView(target: .contact(chatID)) } label: { HStack(spacing: 14) { ProfileAvatar(id: chatID, size: 58); Text("修改头像和昵称 / 备注") } } }
@@ -215,7 +249,7 @@ struct ChatDetailView: View {
                 Toggle("消息免打扰", isOn: Binding(get: { store.muted.contains(chatID) }, set: { store.setMuted($0, for: chatID) }))
                 Toggle("置顶聊天", isOn: Binding(get: { store.pinned.contains(chatID) }, set: { store.setPinned($0, for: chatID) }))
             }
-            Section { Button("设置当前聊天背景") { showWallpaper = true }.foregroundStyle(.wxGreen) }
+            Section { Button("设置当前聊天背景") { showWallpaper = true }.foregroundStyle(Color.wxGreen) }
             Section { Button("清空聊天记录", role: .destructive) { showClear = true } }
             Section { Text("文字、图片、资料和设置均保存在本机。").font(.footnote).foregroundStyle(.secondary) }
         }
@@ -244,7 +278,7 @@ private struct GroupMemberPicker: View {
         NavigationStack {
             List(store.contacts) { c in
                 Button { if selected.contains(c.id) { selected.remove(c.id) } else { selected.insert(c.id) } } label: {
-                    HStack { ProfileAvatar(id: c.id, size: 40); Text(c.name).foregroundStyle(.primary); Spacer(); Image(systemName: selected.contains(c.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(selected.contains(c.id) ? Color.wxGreen : .secondary) }
+                    HStack { ProfileAvatar(id: c.id, size: 40); Text(c.name).foregroundStyle(.primary); Spacer(); Image(systemName: selected.contains(c.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(selected.contains(c.id) ? Color.wxGreen : Color.secondary) }
                 }
             }
             .navigationTitle("添加群成员")

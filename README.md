@@ -1,4 +1,4 @@
-# WeChat26Demo 0.3.4
+# WeChat26Demo 0.3.4 compilefix1
 
 本地离线 iOS 26 SwiftUI Demo。此包重新生成用于下载，保持输入栏三段式布局、系统原生附件菜单、圆角分组聊天列表、本地保存、资料编辑、群成员编辑和多图叠牌。
 
