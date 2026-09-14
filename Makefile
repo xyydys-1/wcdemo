@@ -12,20 +12,18 @@ WeChat26Demo_FILES := \
 	AppDelegate.m \
 	SceneDelegate.m \
 	LocalData.swift \
-	DirectoryData.swift \
 	DemoSeed.swift \
 	Models.swift \
-	MediaViews.swift \
 	ImageStyling.swift \
-	PhotoLayoutMetrics.swift \
+	PhotoGestureIntent.swift \
 	PhotoPanGesture.swift \
-	NativePhotoStack.swift \
+	MediaViews.swift \
 	ProfileViews.swift \
 	RootViews.swift \
 	ChatViews.swift \
 	SecondaryViews.swift
 
-WeChat26Demo_FRAMEWORKS := UIKit SwiftUI PhotosUI ImageIO QuickLook
+WeChat26Demo_FRAMEWORKS := UIKit PhotosUI
 WeChat26Demo_CFLAGS := -fobjc-arc
 WeChat26Demo_SWIFTFLAGS := -parse-as-library
 

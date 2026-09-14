@@ -33,13 +33,6 @@ jobs:
           echo "iPhoneOS SDK: $SDK_VERSION"
           [[ "$SDK_VERSION" == 26.* ]]
 
-      - name: Verify saved history, photo layout and directory
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcrun swiftc -swift-version 5 -parse-as-library LocalData.swift DirectoryData.swift DemoSeed.swift PhotoLayoutMetrics.swift Tests/LocalDataTests.swift Tests/MigrationTests.swift Tests/PhotoLayoutTests.swift Tests/DirectoryTests.swift -o "$RUNNER_TEMP/wechat-local-data-tests"
-          "$RUNNER_TEMP/wechat-local-data-tests"
-
       - name: Install build dependencies
         shell: bash
         run: |

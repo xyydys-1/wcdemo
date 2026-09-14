@@ -1,176 +1,117 @@
 import SwiftUI
-import UIKit
-import ImageIO
-import QuickLook
-
-// Images are copied into Application Support; never retain a Photos temporary URL.
-final class LocalMediaFiles: @unchecked Sendable {
-    let directory: URL
-    private let cache = NSCache<NSString, UIImage>()
-    private let aspectCache = NSCache<NSString, NSNumber>()
-    private let readableCache = NSCache<NSString, NSNumber>()
-    init(directory: URL) {
-        self.directory = directory
-        cache.totalCostLimit = 48 * 1024 * 1024
-    }
-
-    func url(_ key: String) -> URL? {
-        if key.hasPrefix("local:") {
-            let name = String(key.dropFirst(6))
-            guard !name.isEmpty, name == (name as NSString).lastPathComponent else { return nil }
-            return directory.appendingPathComponent(name)
-        }
-        return Bundle.main.url(forResource: key, withExtension: "jpg")
-            ?? Bundle.main.url(forResource: key, withExtension: "png")
-            ?? Bundle.main.url(forResource: key, withExtension: "jpg", subdirectory: "Resources")
-            ?? Bundle.main.url(forResource: key, withExtension: "png", subdirectory: "Resources")
-    }
-
-    func isReadable(_ key: String) -> Bool {
-        if let result = readableCache.object(forKey: key as NSString) { return result.boolValue }
-        // Check once at thumbnail size; corrupt files never become giant empty bubbles.
-        let result = image(key, maxPixel: 96) != nil
-        readableCache.setObject(NSNumber(value: result), forKey: key as NSString)
-        return result
-    }
-
-    func image(_ key: String, maxPixel: Int = 800) -> UIImage? {
-        let cacheKey = "\(key)@\(maxPixel)" as NSString
-        if let image = cache.object(forKey: cacheKey) { return image }
-        guard let url = url(key), let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cg = Self.thumbnail(source, maxPixel: maxPixel) else { return UIImage(named: key) }
-        let image = UIImage(cgImage: cg)
-        cache.setObject(image, forKey: cacheKey, cost: cg.bytesPerRow * cg.height)
-        return image
-    }
-
-    func aspect(_ key: String) -> CGFloat {
-        // Existing resources are 139x139 video-picker crops, not original photos.
-        // Only those demo thumbnails need hints; all imported images use their real ratio.
-        let hints: [String: CGFloat] = ["photo_7": 0.72, "photo_8": 1.78, "photo_9": 1.78,
-            "photo_10": 1.78, "photo_11": 1.78, "photo_12": 1.78, "photo_13": 0.72,
-            "photo_14": 0.72, "photo_15": 0.72]
-        if !key.hasPrefix("local:"), let hint = hints[key] { return hint }
-        if let ratio = aspectCache.object(forKey: key as NSString) { return CGFloat(ratio.doubleValue) }
-        // Reading dimensions must not decode every photo again on each drag frame.
-        guard let url = url(key), let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-            let w = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-            let h = properties[kCGImagePropertyPixelHeight] as? NSNumber, h.doubleValue > 0 else { return 1 }
-        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
-        let rotated = (5...8).contains(orientation)
-        let ratio = rotated ? h.doubleValue / max(1, w.doubleValue) : w.doubleValue / h.doubleValue
-        aspectCache.setObject(NSNumber(value: ratio), forKey: key as NSString)
-        return CGFloat(ratio)
-    }
-
-    func importImage(_ data: Data, maxPixel: Int) throws -> String {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cg = Self.thumbnail(source, maxPixel: maxPixel) else { throw LocalDataError.invalidImage }
-        let image = UIImage(cgImage: cg)
-        let alpha = [CGImageAlphaInfo.first, .last, .premultipliedFirst, .premultipliedLast].contains(cg.alphaInfo)
-        guard let bytes = alpha ? image.pngData() : image.jpegData(compressionQuality: 0.9) else {
-            throw LocalDataError.invalidImage
-        }
-        let name = UUID().uuidString + (alpha ? ".png" : ".jpg")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try bytes.write(to: directory.appendingPathComponent(name), options: .atomic)
-        return "local:" + name
-    }
-
-    // Call only for uncommitted imports, never for assets still referenced by an archive.
-    func removeUnreferencedImport(_ key: String) {
-        guard key.hasPrefix("local:"), let url = url(key) else { return }
-        try? FileManager.default.removeItem(at: url)
-    }
-
-    private static func thumbnail(_ source: CGImageSource, maxPixel: Int) -> CGImage? {
-        CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixel
-        ] as CFDictionary)
-    }
-}
 
 struct StoredPhoto: View {
     @EnvironmentObject private var store: DemoStore
-    let source: String
-    var maxPixel = 800
+    let key: String
+    var contentMode: ContentMode = .fill
     var body: some View {
         Group {
-            if let image = store.media.image(source, maxPixel: maxPixel) {
-                Image(uiImage: image).resizable().scaledToFill()
+            if let image = store.media.image(key) {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
             } else {
-                ZStack {
-                    Color(uiColor: .tertiarySystemFill)
-                    Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondary)
-                }
+                ZStack { Color.secondary.opacity(0.10); Image(systemName: "photo").foregroundStyle(.secondary) }
             }
         }
     }
 }
 
-struct PhotoPresentation: Identifiable {
-    let id = UUID()
-    let keys: [String]
-    var index = 0
-}
-
-// Public Quick Look supplies native full-screen paging, pinch zoom and sharing.
-struct NativePhotoPreview: UIViewControllerRepresentable {
-    @Environment(\.dismiss) private var dismiss
+@available(iOS 26.0, *)
+struct PhotoStackMessage: View {
     @EnvironmentObject private var store: DemoStore
-    let presentation: PhotoPresentation
+    let keys: [String]
+    let width: CGFloat
+    @State private var expanded = false
+    @State private var frontIndex = 0
+    @State private var drag = CGSize.zero
+    @State private var dragging = false
+    @State private var previewKey: String?
 
-    final class Item: NSObject, QLPreviewItem {
-        let previewItemURL: URL?
-        let previewItemTitle: String?
-        init(url: URL, title: String) { previewItemURL = url; previewItemTitle = title }
-    }
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        var items: [Item] = []
-        var close: () -> Void = {}
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { items.count }
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem { items[index] }
-        @objc func done() { close() }
-    }
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIViewController(context: Context) -> UINavigationController {
-        context.coordinator.close = { dismiss() }
-        context.coordinator.items = presentation.keys.enumerated().compactMap { index, key in
-            guard let url = store.media.url(key), FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return Item(url: url, title: "照片 \(index + 1)")
-        }
-        let preview = QLPreviewController()
-        preview.dataSource = context.coordinator
-        if !context.coordinator.items.isEmpty {
-            preview.currentPreviewItemIndex = min(presentation.index, context.coordinator.items.count - 1)
-        }
-        preview.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done,
-            target: context.coordinator, action: #selector(Coordinator.done))
-        return UINavigationController(rootViewController: preview)
-    }
-    func updateUIViewController(_ controller: UINavigationController, context: Context) {}
-}
+    private let follow: [CGFloat] = [1, 0.40, 0.20, 0.10, 0.05]
+    private let blurs: [CGFloat] = [0, 2.8, 4.3, 5.6, 6.8]
 
-struct CameraCaptureView: UIViewControllerRepresentable {
-    let onPhoto: (UIImage?) -> Void
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let onPhoto: (UIImage?) -> Void
-        init(onPhoto: @escaping (UIImage?) -> Void) { self.onPhoto = onPhoto }
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { onPhoto(nil) }
-        func imagePickerController(_ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            onPhoto(info[.originalImage] as? UIImage)
+    var body: some View {
+        Group {
+            if expanded { expandedGrid } else { collapsedDeck }
+        }
+        .animation(.spring(duration: 0.48, bounce: 0.18), value: expanded)
+        .fullScreenCover(isPresented: Binding(get: { previewKey != nil }, set: { if !$0 { previewKey = nil } })) {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let key = previewKey { StoredPhoto(key: key, contentMode: .fit).padding(14) }
+            }
+            .overlay(alignment: .topTrailing) {
+                Button { previewKey = nil } label: { Image(systemName: "xmark").font(.title2).frame(width: 46,height:46) }
+                    .buttonStyle(.glass).padding()
+            }
         }
     }
-    func makeCoordinator() -> Coordinator { Coordinator(onPhoto: onPhoto) }
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController(); picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
+
+    private var ordered: [String] {
+        guard !keys.isEmpty else { return [] }
+        return (0..<keys.count).map { keys[(frontIndex + $0) % keys.count] }
     }
-    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {}
+
+    private var collapsedDeck: some View {
+        let visible = Array(ordered.prefix(5))
+        return ZStack {
+            ForEach(Array(visible.enumerated()).reversed(), id: \.element) { depth, key in
+                let ratio = store.media.aspect(key)
+                let cardWidth = min(width - 14, 238)
+                let cardHeight = min(230, max(132, cardWidth / ratio))
+                let f = follow[min(depth, follow.count - 1)]
+                StoredPhoto(key: key)
+                    .frame(width: cardWidth, height: cardHeight)
+                    .clipped()
+                    .blur(radius: blurs[min(depth, blurs.count - 1)])
+                    .photoEdge(cornerRadius: 17)
+                    .compositingGroup()
+                    .rotationEffect(.degrees(Double(depth - 2) * 2.5 + Double(drag.width / 28 * f)))
+                    .offset(x: CGFloat(depth) * 5 + drag.width * f,
+                            y: CGFloat(depth) * 6 + drag.height * f)
+                    .scaleEffect(1 - CGFloat(depth) * 0.018)
+                    .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
+                    .animation(.interactiveSpring(response: 0.22 + Double(depth) * 0.08, dampingFraction: 0.76), value: drag)
+                    .zIndex(Double(10-depth))
+                    .onTapGesture { if !dragging { expanded = true } }
+                    .onLongPressGesture { previewKey = key }
+            }
+        }
+        .frame(width: width, height: 255)
+        .contentShape(Rectangle())
+        .gesture(PhotoPanGesture(enabled: keys.count > 1,
+            changed: { offset in dragging = true; drag = CGSize(width: max(-width*0.58,min(width*0.58,offset.width)), height: max(-30,min(30,offset.height*0.45))) },
+            ended: { offset, velocity in
+                let switchCard = abs(offset.width) > width*0.24 || abs(velocity.width) > 720
+                withAnimation(.spring(duration: 0.48, bounce: 0.20)) { drag = .zero }
+                if switchCard && !keys.isEmpty { frontIndex = (frontIndex + 1) % keys.count }
+                DispatchQueue.main.asyncAfter(deadline: .now()+0.12) { dragging = false }
+            },
+            cancelled: { withAnimation(.spring(duration: 0.42, bounce: 0.18)) { drag = .zero }; dragging = false }))
+    }
+
+    private var expandedGrid: some View {
+        let columns = keys.count >= 3 ? 3 : max(1, keys.count)
+        let rows = stride(from: 0, to: ordered.count, by: columns).map { Array(ordered[$0..<min($0+columns, ordered.count)]) }
+        return Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(row, id: \.self) { key in
+                        StoredPhoto(key: key, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .photoEdge(cornerRadius: 11)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let idx = keys.firstIndex(of: key) { frontIndex = idx }
+                                expanded = false
+                            }
+                            .onLongPressGesture { previewKey = key }
+                    }
+                    if row.count < columns {
+                        ForEach(0..<(columns-row.count), id: \.self) { _ in Color.clear.aspectRatio(1, contentMode: .fit) }
+                    }
+                }
+            }
+        }
+        .frame(width: min(width + 78, 340))
+    }
 }

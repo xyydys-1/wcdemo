@@ -1,115 +1,62 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
-struct ProfileSelection: Identifiable { let id: String }
+enum ProfileTarget: Hashable { case me, contact(String), group(String) }
 
 @available(iOS 26.0, *)
-struct ProfileEditor: View {
+struct ProfileEditorView: View {
     @EnvironmentObject private var store: DemoStore
     @Environment(\.dismiss) private var dismiss
-    let profileID: String
-    var creating = false
-    var onSaved: ((String) -> Void)? = nil
+    let target: ProfileTarget
     @State private var name = ""
-    @State private var avatarKey: String?
-    @State private var photoItem: PhotosPickerItem?
-    @State private var importing = false
-    @State private var loaded = false
-    @State private var importID = UUID()
-    @State private var problem: String?
-    private var isGroup: Bool { store.chats.first { $0.id == profileID }?.isGroup ?? false }
-    private var title: String { creating ? "添加朋友" : (isGroup ? "群资料" : (profileID == "me" ? "我的资料" : "头像与备注")) }
+    @State private var item: PhotosPickerItem?
+    @State private var pickedImage: UIImage?
 
     var body: some View {
         Form {
             Section {
-                VStack(spacing: 14) {
-                    PhotosPicker(selection: $photoItem, matching: .images, preferredItemEncoding: .compatible) {
-                        ZStack(alignment: .bottomTrailing) {
-                            avatarPreview
-                            Image(systemName: "camera.fill").font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.primary).frame(width: 32, height: 32)
-                                .glassEffect(.regular, in: Circle()).offset(x: 5, y: 5)
-                        }
-                    }.disabled(importing)
-                    if importing { ProgressView("正在读取照片…") }
-                    else { Text("轻点头像，从本机照片中选择").font(.footnote).foregroundStyle(.secondary) }
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 18)
-                if avatarKey != nil {
-                    Button(role: .destructive) { avatarKey = nil; photoItem = nil } label: {
-                        ArtworkLabel(title: "使用默认头像", artwork: "profile", titleColor: .red)
-                    }.disabled(importing)
-                }
+                HStack { Spacer(); avatarPreview.frame(width: 92, height: 92); Spacer() }
+                PhotosPicker(selection: $item, matching: .images) { Label("从图库选择头像", systemImage: "photo") }
             }
-            Section {
-                TextField(isGroup ? "群名称" : "昵称 / 备注", text: $name)
-                    .textInputAutocapitalization(.never)
-            } header: {
-                Text(isGroup ? "群名称" : "昵称 / 备注")
-            } footer: {
-                Text("保存后会同步显示在聊天列表、通讯录和消息旁。")
-            }
-            if let problem {
-                Section { Text(problem).font(.footnote).foregroundStyle(.red) }
-            }
+            Section { TextField(fieldPrompt, text: $name) }
         }
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Button("取消") { importID = UUID(); dismiss() } }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") {
-                    if store.saveProfile(id: profileID, name: name, avatarKey: avatarKey) {
-                        onSaved?(profileID)
-                        dismiss()
-                    }
-                    else { problem = store.errorMessage ?? "暂时无法保存，请重试。" }
-                }
-                .fontWeight(.semibold)
-                .disabled(importing || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .onAppear {
-            guard !loaded else { return }
-            name = creating ? "" : store.profile(profileID).name
-            avatarKey = creating ? nil : store.profile(profileID).avatarKey
-            loaded = true
-        }
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
-            let token = UUID(); importID = token
-            importing = true; problem = nil
-            Task {
-                do {
-                    guard let data = try await item.loadTransferable(type: Data.self) else { throw LocalDataError.invalidImage }
-                    let key = try await store.importImage(data, maxPixel: 512)
-                    guard token == importID else { store.media.removeUnreferencedImport(key); return }
-                    avatarKey = key
-                } catch { if token == importID { problem = error.localizedDescription } }
-                if token == importID { importing = false }
-            }
-        }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { save(); dismiss() }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
+        .onAppear { load() }
+        .onChange(of: item) { _, value in Task { if let value, let data = try? await value.loadTransferable(type: Data.self), let image = UIImage(data: data) { pickedImage = image } } }
     }
-    private var avatarPreview: some View {
-        Group {
-            if let key = avatarKey, let image = store.media.image(key, maxPixel: 256) {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                StoredPhoto(source: DemoArtwork.profile(profileID), maxPixel: 384)
-            }
-        }
-        .frame(width: 100, height: 100)
-        .photoSurface(cornerRadius: 24)
+
+    private var title: String { switch target { case .me: return "个人资料"; case .contact: return "修改资料"; case .group: return "群资料" } }
+    private var fieldPrompt: String { if case .group = target { return "群名" }; return "昵称 / 备注" }
+    @ViewBuilder private var avatarPreview: some View {
+        if let pickedImage { Image(uiImage: pickedImage).resizable().scaledToFill().clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
+        else { switch target { case .me: ProfileAvatar(id: "me", size: 92); case .contact(let id): ProfileAvatar(id: id, size: 92); case .group(let id): ChatAvatar(chat: store.chat(id), size: 92) } }
+    }
+    private func load() { switch target { case .me: name = store.profileName("me"); case .contact(let id): name = store.profileName(id); case .group(let id): name = store.chat(id).title } }
+    private func save() {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch target { case .me: store.updateSelf(name: clean, avatar: pickedImage); case .contact(let id): store.updateContact(id, name: clean, avatar: pickedImage); case .group(let id): store.updateGroup(id, name: clean, avatar: pickedImage) }
     }
 }
 
 @available(iOS 26.0, *)
 struct NewContactView: View {
-    var onSaved: ((String) -> Void)? = nil
-    @State private var profileID = "contact-" + UUID().uuidString
-
+    @EnvironmentObject private var store: DemoStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var item: PhotosPickerItem?
+    @State private var image: UIImage?
     var body: some View {
-        ProfileEditor(profileID: profileID, creating: true, onSaved: onSaved)
+        Form {
+            Section {
+                HStack { Spacer(); Group { if let image { Image(uiImage: image).resizable().scaledToFill() } else { DemoAvatar(symbol: "person.fill", colorName: "blue", size: 86) } }.frame(width:86,height:86).clipShape(RoundedRectangle(cornerRadius:20,style:.continuous)); Spacer() }
+                PhotosPicker(selection: $item, matching: .images) { Label("选择头像", systemImage: "photo") }
+            }
+            Section { TextField("昵称 / 备注", text: $name) }
+        }
+        .navigationTitle("新的朋友").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("保存") { store.addContact(name: name.trimmingCharacters(in: .whitespacesAndNewlines), avatar: image); dismiss() }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
+        .onChange(of: item) { _, value in Task { if let value, let data = try? await value.loadTransferable(type: Data.self), let decoded = UIImage(data: data) { image = decoded } } }
     }
 }
